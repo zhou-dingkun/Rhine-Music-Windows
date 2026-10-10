@@ -1,0 +1,76 @@
+/* Desktop shell only: the caption bar lives inside the archive header.
+   The window keeps no system frame, so these controls and the top drag band replace it. */
+
+.window-controls {
+  position: fixed;
+  top: 7px;
+  right: 12px;
+  /* Above the album detail view, the panel scrim and the video archive. */
+  z-index: 60;
+  display: flex;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+.window-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.window-controls button svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.window-controls button:hover {
+  color: var(--accent);
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.window-controls button[data-window-action="close"]:hover {
+  color: #f2ece6;
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+}
+.window-controls button:active {
+  transform: translateY(1px);
+}
+
+/* A hairline where the caption used to end, so the top band reads as the title bar. */
+.window-chrome #stage::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30px;
+  height: 1px;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--line) 26%, var(--line) 74%, transparent);
+  opacity: 0.6;
+}
+
+/* True full screen: the caption strip belongs to the picture, not the window. */
+.window-fullscreen .window-controls {
+  display: none;
+}
+.window-chrome #stage.window-fullscreen::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-controls button {
+    transition-duration: 1ms;
+  }
+}

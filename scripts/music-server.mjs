@@ -2,8 +2,46 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promises as fs, createReadStream } from 'node:fs'
-import { MusicLibraryStore, safeRootList } from './music-library.mjs'
+import { MusicLibraryStore, safeRootList, decodeTextBuffer } from './music-library.mjs'
 import { PlaylistStore } from './playlists.mjs'
+import { VideoLibraryStore, VIDEO_MIME } from './video-library.mjs'
+import { findSubtitles, readSubtitleAsVtt } from './subtitles.mjs'
+
+const AUDIO_EXTENSIONS = new Set(['.flac', '.wav', '.m4a', '.mp4', '.alac', '.dsf', '.dff', '.mp3', '.aac', '.aiff', '.aif', '.ogg', '.opus'])
+const VIDEO_EXTENSIONS = new Set(VIDEO_MIME.keys())
+const PLAYER_SETTINGS_FILE = 'player-settings.json'
+const DECODE_MODES = new Set(['auto', 'hardware', 'software'])
+
+/** Playback preferences the desktop host reads before it creates the WebView2 environment. */
+async function readPlayerSettings(dataDir) {
+  try {
+    const stored = JSON.parse(await fs.readFile(path.join(dataDir, PLAYER_SETTINGS_FILE), 'utf8'))
+    return { decode: DECODE_MODES.has(stored.decode) ? stored.decode : 'auto' }
+  } catch {
+    return { decode: 'auto' }
+  }
+}
+
+/**
+ * Resolves a track the user opened from the shell. Files inside a configured root only need a
+ * rescan; files elsewhere are streamed directly for this session and never joined to the library.
+ */
+async function openAudioFile(store, target) {
+  const found = store.trackByPath(target)
+  if (found) return { kind: 'audio', trackId: found.track.id, albumId: found.album.id }
+  const roots = store.config.roots ?? []
+  if (roots.some((root) => pathIsWithin(root, target))) {
+    if (!store.scanPromise) void store.scan().catch(() => {})
+    return { kind: 'audio', scanning: true }
+  }
+  return {
+    kind: 'audioFile',
+    name: path.parse(target).name,
+    fileName: path.basename(target),
+    format: path.extname(target).slice(1).toUpperCase(),
+    url: `/api/media?path=${encodeURIComponent(target)}`,
+  }
+}
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff': 'font/woff', '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' }
@@ -33,7 +71,8 @@ async function readTrackLyrics(store, trackId) {
   const stat = await fs.stat(actualLyricPath)
   if (!stat.isFile()) return { found: false, text: '' }
   if (stat.size > LYRIC_LIMIT) throw Object.assign(new Error('LRC 文件超过 1 MiB 限制'), { status: 413 })
-  return { found: true, text: await fs.readFile(actualLyricPath, 'utf8') }
+  // Lyric files come from the same taggers as the audio, so they get the same encoding repair.
+  return { found: true, text: decodeTextBuffer(await fs.readFile(actualLyricPath)) }
 }
 
 function json(response, status, data) {
@@ -111,10 +150,15 @@ export async function createMusicServer({
   defaultRoots = process.env.MUSIC_ROOTS ? process.env.MUSIC_ROOTS.split(path.delimiter).filter(Boolean) : [],
   store: providedStore,
   playlistStore: providedPlaylistStore,
+  videoStore: providedVideoStore,
   autoScan = true,
 } = {}) {
   const store = providedStore ?? await new MusicLibraryStore({ dataDir, defaultRoots }).init()
   const playlists = providedPlaylistStore ?? await new PlaylistStore({ dataDir: store.dataDir }).init()
+  // Injected stores (tests) omit the video index entirely; the desktop runtime builds it beside the music index.
+  const videos = providedVideoStore ?? (providedStore
+    ? null
+    : await new VideoLibraryStore({ dataDir: store.dataDir, roots: () => store.config.roots }).init())
   const server = http.createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff')
     response.setHeader('Referrer-Policy', 'same-origin')
@@ -214,6 +258,18 @@ export async function createMusicServer({
       }
       const lyrics = /^\/api\/lyrics\/(track-[A-Za-z0-9-]+)$/.exec(route)
       if (lyrics && get) return json(response, 200, await readTrackLyrics(store, lyrics[1]))
+      if (route === '/api/videos' && get) return json(response, 200, videos?.snapshot() ?? { version: 1, scanning: false, roots: [], videos: [] })
+      if (route === '/api/videos/scan' && request.method === 'POST') {
+        if (videos) void videos.scan().catch(() => {})
+        return json(response, 202, videos?.snapshot() ?? { version: 1, scanning: false, roots: [], videos: [] })
+      }
+      const videoFile = /^\/api\/video\/(video-[a-f0-9]{16})$/.exec(route)
+      const videoPoster = /^\/api\/video-poster\/(video-[a-f0-9]{16})$/.exec(route)
+      if ((videoFile || videoPoster) && get) {
+        const descriptor = videos?.[videoPoster ? 'poster' : 'file'](videoFile ? videoFile[1] : videoPoster[1])
+        if (!descriptor) return json(response, 404, { error: '索引中没有此视频' })
+        return await serveFile(request, response, descriptor, { cache: videoPoster ? 'private, max-age=3600' : 'private, no-cache' })
+      }
       if (route === '/api/foobar/status' && get) return json(response, 200, { configured: !!store.config.foobarBaseUrl, baseUrl: store.config.foobarBaseUrl, connected: false, note: 'configured 仅代表已保存地址；连接状态需读取 /api/foobar/player 实际响应。' })
       if (route.startsWith('/api/foobar/')) {
         if (!store.config.foobarBaseUrl) return json(response, 503, { error: 'foobar2000 / Beefweb 尚未配置连接' })
@@ -227,6 +283,66 @@ export async function createMusicServer({
         response.end(Buffer.from(await upstream.arrayBuffer()))
         return
       }
+      // Playback preferences, persisted where the desktop host can read them before startup.
+      if (route === '/api/player' && get) return json(response, 200, await readPlayerSettings(store.dataDir))
+      if (route === '/api/player' && request.method === 'POST') {
+        const value = await bodyJson(request)
+        if (value.decode !== undefined && !DECODE_MODES.has(value.decode)) return json(response, 400, { error: '不支持的解码方式' })
+        const settings = { ...await readPlayerSettings(store.dataDir), ...(value.decode === undefined ? {} : { decode: value.decode }) }
+        await fs.writeFile(path.join(store.dataDir, PLAYER_SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
+        return json(response, 200, settings)
+      }
+      // Shell integration: a file handed over by Explorer opens in the matching surface.
+      if (route === '/api/open' && request.method === 'POST') {
+        const value = await bodyJson(request)
+        if (typeof value.path !== 'string' || !value.path.trim()) return json(response, 400, { error: '缺少文件路径' })
+        const target = path.resolve(value.path)
+        const stat = await fs.stat(target).catch(() => null)
+        if (!stat?.isFile()) return json(response, 404, { error: '文件不存在或不可读' })
+        const extension = path.extname(target).toLowerCase()
+        if (videos && VIDEO_MIME.has(extension)) {
+          const record = await videos.adopt(target)
+          if (record) return json(response, 200, { kind: 'video', video: videos.publicRecord(record) })
+        }
+        if (AUDIO_EXTENSIONS.has(extension)) return json(response, 200, await openAudioFile(store, target))
+        return json(response, 400, { error: '尚不支持这种文件类型' })
+      }
+      // One-off streaming for a file the shell opened from outside the library.
+      if (route === '/api/media' && get) {
+        const requested = url.searchParams.get('path')
+        const target = requested ? path.resolve(requested) : ''
+        const extension = path.extname(target).toLowerCase()
+        if (!target || (!AUDIO_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension))) {
+          return json(response, 400, { error: '不支持的媒体文件' })
+        }
+        return await serveFile(request, response, {
+          path: target,
+          allowedRoot: path.dirname(target),
+          mime: VIDEO_MIME.get(extension) ?? MIME[extension],
+        })
+      }
+      const subtitleList = /^\/api\/subtitles\/(video-[a-f0-9]{16})$/.exec(route)
+      if (subtitleList && get) {
+        const source = videos?.sourcePath(subtitleList[1])
+        if (!source) return json(response, 404, { error: '索引中没有此视频' })
+        const entries = await findSubtitles(source)
+        return json(response, 200, { subtitles: entries.map((entry, index) => ({ index, name: entry.name, label: entry.label, format: entry.format })) })
+      }
+      const subtitleFile = /^\/api\/subtitle\/(video-[a-f0-9]{16})\/(\d+)$/.exec(route)
+      if (subtitleFile && get) {
+        const source = videos?.sourcePath(subtitleFile[1])
+        const entries = source ? await findSubtitles(source) : []
+        const entry = entries[Number(subtitleFile[2])]
+        if (!entry) return json(response, 404, { error: '没有该字幕' })
+        const body = await readSubtitleAsVtt(entry.path, entry.format)
+        response.writeHead(200, {
+          'Content-Type': 'text/vtt; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        response.end(body)
+        return
+      }
       if (route.startsWith('/api/')) return json(response, 404, { error: 'API 不存在或请求方法不支持' })
       if (!get) return json(response, 405, { error: '只接受 GET/HEAD' })
       const asset = path.resolve(distDir, `.${route === '/' ? '/index.html' : route}`)
@@ -237,8 +353,11 @@ export async function createMusicServer({
     }
   })
   server.requestTimeout = 30_000
-  if (autoScan) server.once('listening', () => { void store.scan().catch(() => {}) })
-  return { server, store }
+  if (autoScan) server.once('listening', () => {
+    void store.scan().catch(() => {})
+    void videos?.scan().catch(() => {})
+  })
+  return { server, store, videoStore: videos }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

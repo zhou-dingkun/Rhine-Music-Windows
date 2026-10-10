@@ -34,6 +34,8 @@ const COVER_PAINT_SIZE = 1024;
 // made the 256px atlas artwork smaller than its 1024px lifted/returning copy.
 export const COVER_INSET = 1 / 128;
 const COVER_PAINT_MARGIN = COVER_PAINT_SIZE * COVER_INSET;
+/** Album switches dissolve over this long; short enough to feel immediate. */
+const COVER_CROSSFADE_MS = 240;
 
 export function containCover(
   width: number,
@@ -136,6 +138,18 @@ export class CoverAtlas {
   private selectedCanvasKey?: string;
   private generation = 0;
   private disposed = false;
+  /** The archive intro paints every cover from the built-in template instead of local artwork. */
+  private templateOnly = false;
+  /** Cross-dissolve state for album switches: the outgoing and incoming hero covers. */
+  private readonly fromCover = document.createElement("canvas");
+  private readonly toCover = document.createElement("canvas");
+  /** Last hero bitmap actually shown, so the next switch always has something to dissolve from. */
+  private readonly lastHeroCover = document.createElement("canvas");
+  private hasHeroCover = false;
+  private hasOutgoingCover = false;
+  private motionEnabled = true;
+  private pendingAtlasSlot?: number;
+  private transition?: { startedAt: number; duration: number };
   private readonly instancesPerPage: number;
   private readonly tileWidth: number;
   private readonly tileHeight: number;
@@ -161,6 +175,12 @@ export class CoverAtlas {
     this.tileCanvas.height = this.tileHeight;
     this.selectedCanvas.width = COVER_PAINT_SIZE;
     this.selectedCanvas.height = COVER_PAINT_SIZE;
+    this.fromCover.width = COVER_PAINT_SIZE;
+    this.fromCover.height = COVER_PAINT_SIZE;
+    this.toCover.width = COVER_PAINT_SIZE;
+    this.toCover.height = COVER_PAINT_SIZE;
+    this.lastHeroCover.width = COVER_PAINT_SIZE;
+    this.lastHeroCover.height = COVER_PAINT_SIZE;
     // Interactive atlas updates upload this canvas directly to WebGL. Keep the
     // normal accelerated 2D context; forcing frequent CPU reads here pins it to
     // software and makes canvas-to-texture uploads much slower.
@@ -587,10 +607,10 @@ export class CoverAtlas {
     const tile = this.assignPageSlot(page, localSlot, key);
     this.slotKeys[slot] = key;
     const generation = this.generation;
-    const image = this.cachedImage(record?.album?.coverUrl);
+    const image = this.templateOnly ? undefined : this.cachedImage(record?.album?.coverUrl);
     this.drawPageTile(pageIndex, tile, key, record, image, generation);
     if (this.selectedKey === key) this.selectAtlasSlot(slot);
-    if (!image && record?.album?.coverUrl)
+    if (!image && !this.templateOnly && record?.album?.coverUrl)
       void this.loadImage(record.album.coverUrl).then((loaded) => {
         if (loaded) this.drawPageTile(pageIndex, tile, key, record, loaded, generation);
       });
@@ -605,23 +625,24 @@ export class CoverAtlas {
       return;
     }
     const generation = this.generation;
+    // Keep the outgoing cover so the switch can dissolve instead of popping.
+    this.captureOutgoingCover();
     this.selectedKey = key;
     const slot = this.slotKeys.indexOf(key);
-    if (slot >= 0) {
-      // The selected cover is already resident in the shelf atlas. Rebind its
-      // page and UV tile instead of copying/uploading a separate 1024² texture
-      // on the first frame of the lift animation.
-      this.selectAtlasSlot(slot);
-    } else {
-      const cached = this.cachedImage(record?.album?.coverUrl);
-      if (cached) paintCover(this.selectedCanvas, record, cached);
-      else if (!this.copyCover(this.selectedCanvas, key))
-        paintCover(this.selectedCanvas, record?.album?.coverUrl ? undefined : record);
-      this.selectedCanvasKey = key;
-      this.selectFallbackTexture();
-      this.updateSelectedTexture();
-    }
-    if (this.cachedImage(record?.album?.coverUrl)) return;
+    // The hero cover is painted into its own canvas for the dissolve, even when the album
+    // already has a resident shelf tile; the atlas tile is rebound once the blend settles.
+    const cached = this.templateOnly ? undefined : this.cachedImage(record?.album?.coverUrl);
+    if (cached) paintCover(this.selectedCanvas, record, cached);
+    else if (!this.templateOnly && this.copyCover(this.selectedCanvas, key)) {
+      // The shelf already holds this album's artwork; reuse it.
+    } else paintCover(this.selectedCanvas, record, undefined);
+    this.selectedCanvasKey = key;
+    this.selectFallbackTexture();
+    this.updateSelectedTexture();
+    this.pendingAtlasSlot = slot >= 0 ? slot : undefined;
+    this.beginCoverTransition();
+    this.rememberHeroCover();
+    if (this.templateOnly || this.cachedImage(record?.album?.coverUrl)) return;
     const image = await this.loadImage(record?.album?.coverUrl);
     if (
       !image ||
@@ -631,6 +652,11 @@ export class CoverAtlas {
     )
       return;
     const currentSlot = this.slotKeys.indexOf(key);
+    // A dissolve is already blending: sharpen its target instead of interrupting it.
+    if (this.transition) {
+      paintCover(this.toCover, record, image);
+      return;
+    }
     if (currentSlot >= 0) {
       this.selectAtlasSlot(currentSlot);
       return;
@@ -688,10 +714,110 @@ export class CoverAtlas {
     });
   }
 
+  /** Switches between the built-in template artwork and the library's own covers. */
+  setTemplateOnly(value: boolean) {
+    if (this.templateOnly === value) return;
+    this.templateOnly = value;
+    // Drop the painted tiles so the next shelf update repaints with the new source.
+    this.reset();
+  }
+
+  /** Copies the currently displayed hero cover aside so a switch can cross-dissolve. */
+  private captureOutgoingCover() {
+    if (!this.hasHeroCover) return;
+    const context = this.fromCover.getContext("2d")!;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.fromCover.width, this.fromCover.height);
+    context.drawImage(this.lastHeroCover, 0, 0, this.fromCover.width, this.fromCover.height);
+    this.hasOutgoingCover = true;
+  }
+
+  /** Remembers the hero bitmap that is on screen now, for the next dissolve. */
+  private rememberHeroCover() {
+    const context = this.lastHeroCover.getContext("2d")!;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.lastHeroCover.width, this.lastHeroCover.height);
+    context.drawImage(this.selectedCanvas, 0, 0, this.lastHeroCover.width, this.lastHeroCover.height);
+    this.hasHeroCover = true;
+  }
+
+  /** Starts blending the previously shown cover into the freshly painted one. */
+  private beginCoverTransition() {
+    if (!this.hasOutgoingCover) {
+      this.transition = undefined;
+      this.settleAtlasSlot();
+      return;
+    }
+    const context = this.toCover.getContext("2d")!;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.toCover.width, this.toCover.height);
+    context.drawImage(this.selectedCanvas, 0, 0, this.toCover.width, this.toCover.height);
+    this.hasOutgoingCover = false;
+    if (!this.motionEnabled) {
+      this.transition = undefined;
+      this.settleAtlasSlot();
+      return;
+    }
+    this.transition = { startedAt: performance.now(), duration: COVER_CROSSFADE_MS };
+    this.paintCoverTransition(0);
+  }
+
+  /** Hands the hero cover back to its resident atlas tile once the dissolve is over. */
+  private settleAtlasSlot() {
+    const slot = this.pendingAtlasSlot;
+    this.pendingAtlasSlot = undefined;
+    if (slot === undefined || !this.selectedKey) return;
+    if (this.slotKeys.indexOf(this.selectedKey) !== slot) return;
+    this.selectAtlasSlot(slot);
+  }
+
+  private paintCoverTransition(progress: number) {
+    const eased = 1 - (1 - progress) * (1 - progress);
+    const context = this.selectedContext;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.selectedCanvas.width, this.selectedCanvas.height);
+    if (eased < 1) {
+      context.globalAlpha = 1 - eased;
+      context.drawImage(this.fromCover, 0, 0, this.selectedCanvas.width, this.selectedCanvas.height);
+    }
+    context.globalAlpha = eased;
+    context.drawImage(this.toCover, 0, 0, this.selectedCanvas.width, this.selectedCanvas.height);
+    context.globalAlpha = 1;
+    this.updateSelectedTexture();
+  }
+
+  /** Driven by the scene's frame loop; returns true while a switch is still blending. */
+  updateTransition(nowMs: number) {
+    const transition = this.transition;
+    if (!transition) return false;
+    const progress = transition.duration <= 0 ? 1 : (nowMs - transition.startedAt) / transition.duration;
+    if (progress >= 1) {
+      this.transition = undefined;
+      // Settle on the final artwork exactly once.
+      this.paintCoverTransition(1);
+      this.settleAtlasSlot();
+      return false;
+    }
+    this.paintCoverTransition(progress);
+    return true;
+  }
+
+  /** The archive's motion switch also silences the cover dissolve. */
+  setMotionEnabled(value: boolean) {
+    this.motionEnabled = value;
+    if (!value) {
+      const transition = this.transition;
+      this.transition = undefined;
+      if (transition) {
+        this.paintCoverTransition(1);
+        this.settleAtlasSlot();
+      }
+    }
+  }
+
   reset() {
     this.generation++;
-    this.slotKeys.fill(undefined);
-    this.slotRecords.fill(undefined);
+    this.slotKeys.fill(undefined);    this.slotRecords.fill(undefined);
     for (const page of this.pages) {
       page.slotKeys.fill(undefined);
       page.keyToTile.clear();

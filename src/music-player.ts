@@ -476,7 +476,8 @@ export class MusicPlayer {
       if (active()) this.fail(this.playbackError(track, audio.error));
       else if (this.song === audio) this.cancelSongFade();
     });
-    audio.src = `/api/audio/${encodeURIComponent(track.id)}`;
+    // Library tracks stream by id; files handed over by the shell carry their own stream URL.
+    audio.src = track.audioUrl || `/api/audio/${encodeURIComponent(track.id)}`;
     return audio;
   }
 

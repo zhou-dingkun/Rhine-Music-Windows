@@ -56,10 +56,12 @@ import { viewportLayout } from "./viewport-layout";
 import { probeGpuCapability } from "./gpu-capability";
 import { BUILD_VERSION } from "./build-version";
 import { activeLyricIndex, parseLrc, type LyricLine } from "./lyrics";
+import { setupVideoArchive } from "./video-app";
+import { setupWindowChrome } from "./window-chrome";
 
 type Theme = "day" | "dusk" | "night";
 type Panel = "library" | "search" | "settings" | "playlists" | "queue" | "lyrics" | null;
-document.title = `Rhine Music ${BUILD_VERSION}`;
+document.title = `Rhine Player ${BUILD_VERSION}`;
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
 const svg = (path: string) =>
@@ -219,6 +221,8 @@ const themeDescriptions: Record<Theme, string> = {
   night: "极简星空与透光白卡",
 };
 const stage = $("#stage");
+// A file handed over by Explorer skips the archive intro and goes straight to its own surface.
+const handedOverFile = new URLSearchParams(location.search).get("open");
 stage.className = "music-app";
 stage.dataset.mode = "archive";
 stage.dataset.theme = preferences.theme;
@@ -226,7 +230,7 @@ stage.innerHTML = `
   <div id="three-scene" class="three-scene"></div>
   <div class="music-vignette" aria-hidden="true"></div>
   <header class="music-header">
-    <div class="music-identity"><a class="music-brand" href="/" aria-label="Rhine Music 音乐库"><strong>RHINE LAB</strong><span>MUSIC ARCHIVE <i>／</i> 私人音乐终端</span></a></div>
+    <div class="music-identity"><a class="music-brand" href="/" aria-label="Rhine Player 音乐库"><strong>RHINE LAB</strong><span>MUSIC ARCHIVE <i>／</i> 私人音乐终端</span></a></div>
     <nav class="music-topnav" aria-label="音乐终端导航">
       <button data-action="library" aria-label="音乐库">${icons.folder}<span>音乐库</span></button>
       <button data-action="search" aria-label="搜索">${icons.search}<span>搜索</span></button>
@@ -268,9 +272,13 @@ stage.innerHTML = `
   <div id="music-empty" class="music-empty" hidden><small>YOUR PRIVATE COLLECTION</small><h1>让音乐进入这座档案馆。</h1><p>选择本地音乐文件夹，专辑封面会出现在每一张卡片上。</p><button data-action="library">设置音乐文件夹 ↗</button><button data-action="demo" class="subtle">先查看演示封面</button></div>
   <div class="music-bottomline"><span>LOCAL COLLECTION <i>·</i> <span id="library-count">0 ALBUMS</span></span><span id="runtime-info">THREE.JS / LOCAL</span></div>
   <div id="music-panel-root"></div><div id="music-toast" role="status" aria-live="polite"></div>
-  <div id="music-loading"><span class="loading-orbit"></span><strong>OPENING THE ARCHIVE</strong><small>正在载入三维专辑架</small></div>
+  <div id="music-loading">${handedOverFile ? "" : '<span class="loading-orbit"></span>'}<strong>${handedOverFile ? "OPENING FILE" : "OPENING THE ARCHIVE"}</strong><small>${handedOverFile ? `正在打开 ${esc(handedOverFile.split(/[\\/]/).pop() ?? "文件")}` : "正在载入三维专辑架"}</small></div>
 `;
 const titleMotion = setupMusicTitleLayout(stage);
+// The desktop shell has no caption bar: the top band drags the window and hosts its controls.
+setupWindowChrome();
+// The local video archive lives in the same folder list and shares the terminal chrome.
+const videoArchive = setupVideoArchive({ notify });
 const textMotion = setupMusicTextMotion(stage);
 // Keep the previous navigation available while the ruler version is on trial.
 const tickMotion = new URLSearchParams(location.search).get("nav") === "previous"
@@ -455,6 +463,8 @@ boot = new MusicBoot(stage, {
   },
   onComplete: (reason) => {
     const now = performance.now() / 1000;
+    // The intro runs on the neutral template; the archive then reveals the real covers.
+    scene?.setCoverTemplate(false);
     if (reason === "skip") scene?.showMusicArchiveImmediately(now);
     else scene?.finishMusicIntro(now);
     effects.setScene("archive");
@@ -1259,11 +1269,13 @@ function renderSettingsPanel() {
     <section class="panel-section"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>切换后自动刷新页面</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${preferences.sortMode === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}</select></label><p>按歌手时，同一歌手的专辑放在同一列；按专辑名时，按拼音或字母顺序排列，每 12 张一列。</p></section>
     <section class="panel-section" id="introduction-settings"><h3>专辑介绍</h3><p>从公开百科查询并更新专辑介绍，附上资料来源。介绍保存在本机，不需要配置 MusicBrainz 联系信息；音乐文件不会上传。</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details></section>
     ${qualityMarkup(renderQuality)}
+    ${decodeMarkup(decodeMode)}
     <section class="panel-section"><h3>动效与显示</h3><label class="settings-row"><span>减少动态效果<small>简化镜头、文字加载和页签过渡</small></span><input type="checkbox" id="reduced-motion" ${preferences.reduced ? "checked" : ""}></label><button class="text-button" data-action="fullscreen">切换全屏 ↗</button></section>
     <section class="panel-section"><h3>声音</h3><label class="settings-row"><span>歌曲音量</span><input type="range" id="volume" aria-label="歌曲音量" min="0" max="100" value="${Math.round(preferences.volume * 100)}"></label><label class="settings-row"><span>切歌淡入淡出<small>当前歌曲先淡出，再淡入下一首</small></span><input type="checkbox" id="song-fade-setting" ${preferences.songFade ? "checked" : ""}></label><label class="settings-row"><span>界面音效<small>玻璃卡片与终端操作</small></span><input type="checkbox" id="sound-setting" ${preferences.sound ? "checked" : ""}></label><label class="settings-row"><span>音效音量</span><input type="range" id="sound-volume" aria-label="音效音量" min="0" max="100" value="${Math.round(preferences.soundVolume * 100)}"></label><label class="settings-row"><span>氛围 BGM<small>专辑开始前淡出，停止后淡入</small></span><input type="checkbox" id="bgm-setting" ${preferences.bgm ? "checked" : ""}></label><label class="settings-row"><span>BGM 音量</span><input type="range" id="bgm-volume" aria-label="BGM 音量" min="0" max="100" value="${Math.round(preferences.bgmVolume * 100)}"></label><button class="text-button" data-action="sound-preview">试听界面音效 ↗</button><p>当前版本支持 Windows 与 macOS，使用浏览器播放本地音乐。DSF / DFF 暂不支持播放，其他格式取决于浏览器解码能力。</p></section>
-    <section class="panel-section"><h3>开发与资源</h3><p>Rhine Music · Windows 桌面版 · WebView2 / WebGL 2（ANGLE）图形渲染。</p><p>Windows 版开发者：<a href="https://github.com/Bong712" target="_blank" rel="noopener">Bong712 ↗</a><br>特别鸣谢：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/Bong712/Rhine-Music-Windows/blob/main/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
+    <section class="panel-section"><h3>开发与资源</h3><p>Rhine Player · Windows 桌面版 · WebView2 / WebGL 2（ANGLE）图形渲染。</p><p>Windows 版开发者：<a href="https://github.com/Bong712" target="_blank" rel="noopener">Bong712 ↗</a><br>特别鸣谢：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/Bong712/Rhine-Music-Windows/blob/main/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
   updateQuality();
   updateIntroductionStatus();
+  void loadDecodeMode();
 }
 
 function renderPlaylistPanel() {
@@ -1615,6 +1627,41 @@ function updateQuality() {
     summary.textContent = `渲染 ${renderQuality.scale}% · 像素上限 ${renderQuality.pixelRatio}× · ${renderQuality.antialias === "off" ? "原始抗锯齿" : "SMAA"}`;
   savePrefs();
 }
+/** Video decode preference: stored on the server so the desktop host can read it at start-up. */
+type DecodeMode = "auto" | "hardware" | "software";
+let decodeMode: DecodeMode = "auto";
+const decodeLabels: Record<DecodeMode, string> = {
+  auto: "自动（跟随系统）",
+  hardware: "硬件优先（GPU 解码）",
+  software: "软件解码（CPU）",
+};
+function decodeMarkup(mode: DecodeMode) {
+  return `<section class="panel-section" id="decode-settings"><h3>视频解码</h3>
+    <label class="settings-row"><span>解码方式<small>改动需要重启应用后生效</small></span><select id="decode-mode" aria-label="视频解码方式">${(Object.keys(decodeLabels) as DecodeMode[]).map((key) => `<option value="${key}" ${mode === key ? "selected" : ""}>${decodeLabels[key]}</option>`).join("")}</select></label>
+    <p class="panel-intro">硬件解码通常更省电、占用更低；播放出现卡顿、花屏或声画不同步时，可改为软件解码排查显卡驱动问题。</p>
+    <div class="panel-actions"><button type="button" data-action="restart-player" class="primary-button">重启应用</button><span id="decode-status" class="scan-status" role="status" aria-live="polite"></span></div>
+  </section>`;
+}
+async function loadDecodeMode() {
+  try {
+    const settings = await request<{ decode: DecodeMode }>("/api/player");
+    decodeMode = settings.decode ?? "auto";
+  } catch {
+    decodeMode = "auto";
+  }
+  const select = document.querySelector<HTMLSelectElement>("#decode-mode");
+  if (select && select.value !== decodeMode) select.value = decodeMode;
+}
+async function saveDecodeMode(mode: DecodeMode) {
+  const status = document.querySelector("#decode-status");
+  try {
+    const settings = await request<{ decode: DecodeMode }>("/api/player", { decode: mode });
+    decodeMode = settings.decode;
+    if (status) status.textContent = `已保存：${decodeLabels[decodeMode]}，重启应用后生效。`;
+  } catch (error) {
+    if (status) status.textContent = `保存失败：${(error as Error).message}`;
+  }
+}
 async function editGenres() {
   const body = document.querySelector("#panel-body");
   try {
@@ -1838,6 +1885,13 @@ document.addEventListener("click", (e) => {
     case "dismiss-panel":
       closePanel();
       break;
+    case "restart-player": {
+      // The host rebuilds the WebView2 environment so a new decode mode takes effect.
+      const bridge = (window as unknown as { chrome?: { webview?: { postMessage(message: string): void } } }).chrome?.webview;
+      if (bridge) bridge.postMessage("window:restart");
+      else notify("请手动重启应用以应用解码设置。");
+      break;
+    }
     case "open":
       setMode("detail");
       break;
@@ -1982,6 +2036,9 @@ document.addEventListener("change", (e) => {
     renderQuality = normalizeQuality(qualityPresets[preferences.quality]);
     updateQuality();
   }
+  if (el.id === "decode-mode") {
+    void saveDecodeMode(el.value as DecodeMode);
+  }
   if (el.dataset.quality) {
     renderQuality = normalizeQuality({
       ...renderQuality,
@@ -2107,8 +2164,13 @@ document.addEventListener("keydown", (e) => {
 
 let lastFrame = 0,
   frameCount = 0;
+// A playing video owns the machine: the archive canvas stops burning frames behind it.
+let videoTheaterActive = false;
+document.addEventListener("rhine:video-active", (event) => {
+  videoTheaterActive = (event as CustomEvent<boolean>).detail === true;
+});
 function frame(ms: number) {
-  if (!document.hidden && scene) {
+  if (!document.hidden && scene && !videoTheaterActive) {
     const frameStartedAt = performance.now();
     const opening = boot?.update(ms / 1000);
     if (!viewer?.isOpen) scene.update(ms / 1000, opening?.cinema);
@@ -2213,6 +2275,9 @@ async function start() {
       `三维专辑阵列，左右切${sortLabel.column}，上下切专辑`,
     );
     stage.classList.toggle("reduce-motion", preferences.reduced);
+    // The intro flies over the shelf, so it uses the neutral template instead of local artwork.
+    const willPlayIntro = albums.length > 0 && !handedOverFile && new URLSearchParams(location.search).get("scene") !== "archive";
+    if (willPlayIntro) scene.setCoverTemplate(true);
     await scene.refreshLibrary(selected);
     scene.setTheme(preferences.theme);
     scene.setQuality(renderQuality);
@@ -2220,7 +2285,7 @@ async function start() {
     bindSceneNavigation(scene);
     $("#music-loading").remove();
     updateSelection();
-    if (albums.length && new URLSearchParams(location.search).get("scene") !== "archive") {
+    if (willPlayIntro) {
       boot?.start(performance.now() / 1000);
     } else {
       scene.showMusicArchiveImmediately(performance.now() / 1000);
@@ -2242,6 +2307,97 @@ async function start() {
   }
 }
 void start();
+
+/**
+ * A file handed over by Explorer: videos open in the player page, audio opens the album detail
+ * view and starts playing. Roots may need a scan first, so the request is retried briefly.
+ */
+async function openHandedOverFile(filePath: string, attempt = 0) {
+  if (!filePath) return;
+  try {
+    const result = await request<{
+      kind: string; trackId?: string; albumId?: string; video?: unknown; scanning?: boolean;
+      name?: string; fileName?: string; format?: string; url?: string;
+    }>("/api/open", { path: filePath });
+    if (result.kind === "video" && result.video) {
+      boot?.skip();
+      videoArchive?.openExternal(result.video as never);
+      return;
+    }
+    if (result.kind === "audioFile" && result.url) {
+      // Outside the library: play it directly and leave the library untouched.
+      boot?.skip();
+      videoArchive?.close();
+      const external: MusicTrack = {
+        id: `external-${result.fileName ?? result.name ?? "audio"}`,
+        albumId: "external",
+        title: result.name ?? result.fileName ?? "外部文件",
+        artist: "外部文件（未加入音乐库）",
+        duration: 0,
+        format: result.format ?? "",
+        browserPlayable: true,
+        audioUrl: result.url,
+        relativePath: result.fileName ?? "",
+        offline: false,
+      };
+      player.setQueue([external]);
+      void player.play(external.id, [external]);
+      notify(`正在直接播放 ${external.title}（未加入音乐库）`);
+      return;
+    }
+    if (result.kind !== "audio") return;
+    await loadLibrary(true);
+    const album = library?.albums.find((entry) => entry.id === result.albumId)
+      ?? library?.albums.find((entry) => entry.tracks.some((track) => track.id === result.trackId));
+    if (!album || !result.trackId) {
+      if (attempt < 15) {
+        window.setTimeout(() => void openHandedOverFile(filePath, attempt + 1), 900);
+        return;
+      }
+      notify("已开始扫描该文件所在文件夹，请稍后在音乐库中打开。");
+      return;
+    }
+    // The album camera can only move once the archive is up: end the intro, then go to detail.
+    if (!(await archiveReady())) {
+      notify(`${album.title} 已在音乐库中，打开专辑即可播放。`);
+      return;
+    }
+    boot?.skip();
+    const tracks = album.tracks.filter((track) => !track.offline);
+    revealAlbum(album.id, result.trackId);
+    player.setQueue(tracks);
+    void player.play(result.trackId, tracks);
+  } catch (error) {
+    notify(`无法打开这个文件：${(error as Error).message}`);
+  }
+}
+
+/** Resolves once the three-dimensional archive finished its intro and accepts selection. */
+function archiveReady(timeoutMs = 20000) {
+  return new Promise<boolean>((resolve) => {
+    const deadline = performance.now() + timeoutMs;
+    const check = () => {
+      if (ready && !boot?.active) {
+        resolve(true);
+        return;
+      }
+      if (performance.now() > deadline) {
+        resolve(false);
+        return;
+      }
+      window.setTimeout(check, 250);
+    };
+    check();
+  });
+}
+
+const handedOver = handedOverFile;
+if (handedOver) void openHandedOverFile(handedOver);
+document.addEventListener("rhine:open-file", (event) => {
+  const path = (event as CustomEvent<string>).detail;
+  if (path) void openHandedOverFile(path);
+});
+
 Object.assign(window, {
   rhineMusic: {
     get library() {
@@ -2274,3 +2430,6 @@ Object.assign(window, {
     },
   },
 });
+
+
+

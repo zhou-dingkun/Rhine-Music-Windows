@@ -1,5 +1,47 @@
 # Rhine Music Windows port changelog
 
+## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.96，2026-10-10）
+
+本分支由 [zhou-dingkun](https://github.com/zhou-dingkun) 在 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows)（上游为 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo)、[LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)）基础上继续开发，按原仓库 MIT 许可开源，保留全部上游署名；非代码素材的授权边界见 [NOTICE.md](NOTICE.md)。
+
+### 新增：本地视频播放器（`src/video-app.ts`、`src/video.css`、`scripts/video-library.mjs`）
+
+- 扫描音乐库文件夹内的视频（MP4/M4V/MOV/MKV/WebM/AVI/FLV/TS/M2TS/MPG/WMV/OGV/3GP），封面取同名图片或目录内 `cover/poster/folder`；`/api/video/<id>` 支持 HTTP Range，进度条定位即时生效，文件不被复制或修改。
+- 播放器界面：进度条（已播/缓冲/悬停时间/十分之一刻度）、音量与滚轮调节、倍速菜单、网页全屏/全屏、播放列表侧栏、上一个/下一个、自动连播、断点续播、静置自动隐藏控制条、状态提示（HUD）、单击画面暂停、双击画面全屏。
+- 键盘：`空格`/`K` 播放暂停；`←` `→` 短按 ±5 秒；**长按 `→` 三倍速快进、长按 `←` 三倍速倒带**（320 ms 触发，松手恢复）；`↑` `↓` 音量；`M` 静音；`F` 全屏；`W` 网页全屏；`V` 字幕；`N`/`PageDown` 下一个；`[` `]` 调速；数字键跳百分比；`ESC` 逐级退出。
+- 视频信息面板：文件名、位置、容器格式、文件大小、修改时间、时长、平均码率、视频编码、分辨率、帧率、音频编码与声道/采样率、字幕轨，可一键复制。元数据由本地容器解析：ISO-BMFF 读取 `ftyp/mvhd/stsd/stts`，Matroska/WebM 走 EBML 的 `Info`、`Tracks`、`Video`、`Audio`（含帧率、采样率、声道、时长）。
+- 动效沿用档案架语言：面板裁切展开 + 扫描线 + 角标，播放页虹膜展开 + 锁定准星 + 栏位滑入；受应用内“减少动态效果”与系统 `prefers-reduced-motion` 控制。
+
+### 新增：字幕支持（`scripts/subtitles.mjs`）
+
+- 自动发现同名字幕（同目录及 `subs`/`sub`/`subtitles`/`字幕` 子目录），支持 `.srt`/`.vtt`/`.ass`/`.ssa`；`/api/subtitles/<id>` 列出字幕轨，`/api/subtitle/<id>/<index>` 转换为 WebVTT 供内核渲染。
+- ASS/SSA 解析 `Format`/`Dialogue`、剥离 `{\...}` 覆盖标签、`\N` 转换行；SRT 时间戳重写；语言标签识别（简体中文/繁体中文/English/日本語/한국어）。
+- 字幕文件与音乐标签共用多编码修复，GBK 字幕可直接显示。
+
+### 新增：Windows 集成（`DesktopProgram.cs`、`src/window-chrome.ts`）
+
+- **打开方式**：`HKCU\Software\Classes` 下注册 `Applications\Rhine-Player-Desktop-<版本>.exe`、`SupportedTypes`（26 种音视频扩展名）与 ProgID `RhineMusic.Media`，仅加入“打开方式”候选，**不修改扩展名默认值**；启动时清理旧版本条目。
+- **快捷方式**：启动时创建/更新桌面与开始菜单的 `Rhine Player.lnk`（目标、工作目录、图标、描述）。
+- **直接打开**：`POST /api/open` 分派——视频进入播放页播放；音乐库内音频进入专辑详情页并播放；库外音频经 `/api/media` 直接播放，**不写入资料库、不修改库根目录**；此类启动跳过开场动画（载入提示为“正在打开 …”）。运行中再次打开文件由单实例交接处理，请求消费一次即删除，普通启动不复现上次文件。
+- **窗口**：无边框窗口，顶部拖动条 + 最小化/最大化/关闭按钮（层级高于面板与播放层），窗口边缘缩放通过页面→宿主命令进入原生缩放循环；最大化使用工作区不遮挡任务栏；**真正的全屏**覆盖任务栏、无内边距与相框残留，`F11` 与播放器全屏按钮共用同一实现，退出播放器自动退出全屏。
+- **应用图标**：`scripts/build-app-icon.ps1` 由共享标识生成 16–256 px 多尺寸 ICO，构建脚本以 `/win32icon` 打包，窗口/任务栏/打开方式均使用。
+
+### 新增：播放与渲染优化
+
+- 播放视频时暂停三维档案架渲染循环，关闭播放页后恢复（实测 2 秒内 draw call 12,101 → 0）。
+- 设置面板新增**视频解码方式**：`自动 / 硬件优先 / 软件解码`，写入 `<数据目录>/player-settings.json`，宿主在创建 WebView2 环境前转换为启动参数（软件解码为 `--disable-accelerated-video-decode`），并提供“重启应用”动作。
+- 专辑封面切换加入 240 ms 交叉溶解（`src/cover-atlas.ts`、`src/scene.ts`），完成后回绑图集分页保持零上传快路径。
+- 开场动画改用内置模板封面，不再使用本机专辑封面。
+
+### 新增：文本编码修复（`scripts/music-library.mjs`）
+
+- 标签与 LRC 歌词支持 UTF-8（含 BOM）、UTF-16LE、GBK、Big5、Shift-JIS、EUC-KR 与 CP1252 回退；仅对成对高位字节触发，`Björk`、`Café` 等合法西文不受影响。实测 484 张专辑 0 条乱码。
+
+### 其他
+
+- 软件名改为 **Rhine Player**（窗口标题、可执行文件名、程序集信息、打开方式条目、页面标题、PWA 清单、设置页文案）；数据目录保持 `%LOCALAPPDATA%\Rhine Music`，升级不丢索引与设置。
+- 构建脚本新增图标生成与 `/win32icon`，版本分配与产物命名同步为 `Rhine-Player-Desktop-<版本>.exe`。
+
 ## 0.6.0-dev.57 (2026-10-04)
 
 - Leave the Windows executable CompanyName field blank so the independent developer is not presented as a company.
@@ -263,5 +305,161 @@
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
 
 ## 0.6.0-dev.55 (2026-10-04)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.58 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.59 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.60 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.61 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.62 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.63 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.64 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.65 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.66 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.67 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.68 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.69 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.70 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.71 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.72 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.73 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.74 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.75 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.76 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.77 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.78 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.79 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.80 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.81 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.82 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.83 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.84 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.85 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.86 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.87 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.88 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.89 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.90 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.91 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.92 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.93 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.94 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.95 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.96 (2026-10-10)
 
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.

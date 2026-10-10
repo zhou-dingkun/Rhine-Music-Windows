@@ -6,6 +6,7 @@
 
 | 范围 | 署名与来源 |
 | --- | --- |
+| Rhine Player 分支（本仓库） | **Copyright (c) 2026 zhou-dingkun**。在 Bong712 的 Windows 移植版基础上继续开发：本地视频播放与字幕、窗口与系统集成（打开方式、快捷方式、真全屏）、解码方式选项、视频信息面板、标签与歌词多编码修复等。不主张对上游代码或第三方素材享有原创权利。 |
 | Windows 版开发与维护 | **Copyright (c) 2026 Bong712**。包括 Windows 桌面宿主、Windows 版构建和本移植版本新增或修改的代码；不主张对上游代码或第三方素材享有原创权利。 |
 | Rhine-Music-Demo 上游音乐适配 | **Copyright (c) 2026 RonaldDeng**。本项目从 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo) 继承音乐库与播放服务、专辑模型适配、音乐界面和相关修改；保留其原始署名。 |
 | 原版 RhineLabUI | **Copyright (c) 2026 LBEILC**。[原仓库](https://github.com/LBEILC/RhineLabUI)，初始基于提交 [`5abab02367465d9189f4ae65bcb6f17fdb5938f7`](https://github.com/LBEILC/RhineLabUI/tree/5abab02367465d9189f4ae65bcb6f17fdb5938f7)。保留其三维档案界面、渲染与动效基础、建模脚本、资料说明和 Git 历史。 |

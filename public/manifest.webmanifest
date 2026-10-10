@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Rhine Music Demo",
-  "short_name": "Rhine Music",
+  "name": "Rhine Player",
+  "short_name": "Rhine Player",
   "description": "以三维专辑卡片浏览和播放本地音乐",
   "lang": "zh-CN",
   "start_url": "./?source=pwa",
@@ -30,3 +30,5 @@
     }
   ]
 }
+
+

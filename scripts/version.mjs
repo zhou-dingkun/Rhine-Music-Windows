@@ -130,8 +130,8 @@ async function synchronize(state, { saveState, changelogEntry } = {}) {
   }
   readme = readme.replace(/^\d+\.\d+\.\d+(?:-dev\.\d+)? 是本机开发候选包/m,
     `${version} 是本机开发候选包`)
-  readme = readme.replace(/Rhine-Music-Desktop-\d+\.\d+\.\d+(?:-dev\.\d+)?\.exe/g,
-    `Rhine-Music-Desktop-${version}.exe`)
+  readme = readme.replace(/Rhine-Player-Desktop-\d+\.\d+\.\d+(?:-dev\.\d+)?\.exe/g,
+    `Rhine-Player-Desktop-${version}.exe`)
   readme = readme.replace(/app-v\d+\.\d+\.\d+(?:-dev\.\d+)?/g, `app-v${version}`)
 
   const writes = [
@@ -222,3 +222,5 @@ try {
 } finally {
   await releaseLock()
 }
+
+

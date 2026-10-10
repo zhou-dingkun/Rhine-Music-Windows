@@ -188,7 +188,7 @@ export class ModelViewer {
     this.root.dataset.albumId = album?.id ?? "";
     this.root.querySelector(".viewer-back span")!.textContent = album ? "返回专辑" : "返回档案";
     this.renderer.domElement.setAttribute("aria-label", `${album ? "专辑" : "档案"}三维模型：拖动旋转，方向键平移，滚轮或加减键缩放，Home 复位`);
-    this.root.querySelector(".viewer-heading > span")!.textContent = album ? "RHINE MUSIC / ALBUM OBJECT" : "RHINE LAB / OBJECT STUDY";
+    this.root.querySelector(".viewer-heading > span")!.textContent = album ? "RHINE PLAYER / ALBUM OBJECT" : "RHINE LAB / OBJECT STUDY";
     this.root.querySelector('[data-viewer="explode"]')!.innerHTML = `<span>＋</span>${album ? "拆解专辑" : "拆解档案"}`;
     this.root.querySelector(".viewer-parts")!.innerHTML = `<div>ASSEMBLY / 装配结构</div>${this.parts.map((part, index) => `<p><span>${String(index + 1).padStart(2, "0")}</span><strong>${part.label}</strong><small>${part.en}</small></p>`).join("")}`;
     this.root.querySelector('[data-viewer="clear"]')!.textContent = album ? "清晰玻璃" : "清晰";
@@ -685,3 +685,4 @@ export class ModelViewer {
     });
   }
 }
+

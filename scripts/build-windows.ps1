@@ -68,8 +68,8 @@ try {
     throw "A Windows development package needs a unique prerelease version; found '$version'."
   }
   $numericVersion = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $Matches[4]
-  $exeName = "Rhine-Music-Desktop-$version.exe"
-  $readmeName = "README-Rhine-Music-Desktop-$version.txt"
+  $exeName = "Rhine-Player-Desktop-$version.exe"
+  $readmeName = "README-Rhine-Player-Desktop-$version.txt"
   $releaseManifestName = "release-manifest-$version.json"
   $exePath = Join-Path $outputDir $exeName
   $readmePath = Join-Path $outputDir $readmeName
@@ -101,7 +101,7 @@ try {
 
   Push-Location $projectRoot
   try {
-    & npm run build
+    & npm.cmd run build
     if ($LASTEXITCODE -ne 0) { throw 'The web application build failed.' }
     $buildRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "work\windows-build-$version"))
     $safeWorkRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'work')).TrimEnd('\') + '\'
@@ -146,10 +146,21 @@ try {
     [IO.Compression.ZipFile]::CreateFromDirectory($payloadRoot, $payloadZip, [IO.Compression.CompressionLevel]::Optimal, $false)
     $stagedExePath = Join-Path $buildRoot $exeName
     $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
+    # The icon is repackaged from the shared mark; regenerate it when a fresh clone lacks it.
+    $iconPath = Join-Path $projectRoot 'assets\app-icon.ico'
+    if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+      if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'public\icons\icon-512.png') -PathType Leaf)) {
+        & $NodePath (Join-Path $projectRoot 'scripts\build-icons.mjs')
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to rasterise the shared brand mark.' }
+      }
+      & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $projectRoot 'scripts\build-app-icon.ps1')
+      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $iconPath -PathType Leaf)) { throw 'Failed to build the application icon.' }
+    }
     $references = @('System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Web.Extensions.dll', 'System.IO.Compression.dll', 'System.IO.Compression.FileSystem.dll') | ForEach-Object { "/reference:$(Join-Path $framework $_)" }
     $arguments = @(
       '/nologo', '/target:winexe', '/platform:x64', '/optimize+', "/out:$stagedExePath",
       "/win32manifest:$(Join-Path $projectRoot 'app.manifest')",
+      "/win32icon:$iconPath",
       "/resource:$payloadZip,RhineMusicPayload.zip",
       "/reference:$(Join-Path $WebView2Dir 'Microsoft.Web.WebView2.Core.dll')",
       "/reference:$(Join-Path $WebView2Dir 'Microsoft.Web.WebView2.WinForms.dll')"
@@ -170,7 +181,7 @@ try {
     $exeHash = (Get-FileHash -LiteralPath $stagedExePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $payloadHash = (Get-FileHash -LiteralPath $payloadZip -Algorithm SHA256).Hash.ToLowerInvariant()
     $releaseManifest = [ordered]@{
-      application = 'Rhine Music Desktop'
+      application = 'Rhine Player Desktop'
       version = $version
       fileVersion = $versionInfo.FileVersion
       productVersion = $versionInfo.ProductVersion
@@ -242,3 +253,6 @@ try {
   }
   Exit-RhineBuildLock -Lock $buildLock
 }
+
+
+

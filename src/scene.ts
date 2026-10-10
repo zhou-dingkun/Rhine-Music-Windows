@@ -531,6 +531,14 @@ export class ArchiveScene {
     await this.covers.select(records[index]);
   }
 
+  /** The archive intro shows the built-in template covers, then the library's own artwork. */
+  setCoverTemplate(value: boolean) {
+    if (!this.covers) return;
+    this.covers.setTemplateOnly(value);
+    // Rebind the hero cover so it repaints from the new source straight away.
+    void this.covers.select(records[fileAtSlot(this.selectedSlot)]);
+  }
+
   enableSelectionLighting() {
     this.selectionLighting ??= new MusicSelectionLighting(this.scene);
     this.appearance.musicLighting = this.selectionLighting;
@@ -726,6 +734,8 @@ export class ArchiveScene {
   }
   setReduced(value: boolean) {
     this.reduced = value;
+    // The archive's motion switch also silences the cover dissolve.
+    this.covers?.setMotionEnabled(!value);
     if (value && this.themeTransition) {
       this.themeTransition.finish();
       this.themeTransition = undefined;
@@ -1859,8 +1869,9 @@ export class ArchiveScene {
     this.shadowOnlyInstanceCount = shadowOnlyInstanceCount;
     const instanceCommitEnded = profiling ? performance.now() : 0;
     const atlasCommitStarted = profiling ? performance.now() : 0;
-    if (musicLibrary && this.covers) this.covers.commitMatrices();
-    if (profiling) {
+    // Album switches dissolve the hero cover instead of swapping the texture abruptly.
+    if (musicLibrary && this.covers) this.covers.updateTransition(time * 1000);
+    if (musicLibrary && this.covers) this.covers.commitMatrices();    if (profiling) {
       const now = performance.now();
       this.profiler.recordScenePhase("instance-batch-commit", instanceCommitEnded - instanceCommitStarted);
       this.profiler.recordScenePhase("atlas-matrix-commit", now - atlasCommitStarted);

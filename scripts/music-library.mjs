@@ -10,6 +10,128 @@ const MBID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const unique = (items) => [...new Set(items.filter(Boolean))]
 const hash = (value) => createHash('sha256').update(value).digest('hex').slice(0, 24)
 const text = (value) => typeof value === 'string' ? value.trim() : ''
+
+const EAST_ASIAN_TEXT = /[\u2e80-\u9fff\uf900-\ufaff\uff01-\uff60\uffe0-\uffef\uac00-\ud7af]/
+/** Half-width kana and full-width Latin only appear when a double-byte charset was read wrongly. */
+const GARBAGE_TEXT = /[\uff10-\uff19\uff21-\uff3a\uff41-\uff5a\uff61-\uff9f]/
+/** Simplified Chinese first: it is the usual source of ISO-8859-1-labelled GBK tags. */
+const LEGACY_CHARSETS = ['gbk', 'big5', 'shift_jis', 'euc-kr']
+
+function eastAsianCount(value) {
+  let east = 0
+  for (const character of value) if (EAST_ASIAN_TEXT.test(character)) east += 1
+  return east
+}
+
+/** Kana only ever appear in a Japanese reading, so they break charset ties towards Shift-JIS. */
+const KANA_TEXT = /[\u3040-\u30ff]/
+
+/** Windows-1252 punctuation sits above U+00FF; restoring those bytes keeps the round trip exact. */
+const CP1252_BYTES = new Map(Object.entries({
+  '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86, '‡': 0x87, 'ˆ': 0x88, '‰': 0x89,
+  'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95,
+  '–': 0x96, '—': 0x97, '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f,
+}))
+
+const isHighByteCharacter = (character) =>
+  character !== undefined && (CP1252_BYTES.has(character) || (character.charCodeAt(0) >= 0x80 && character.charCodeAt(0) <= 0xff))
+
+function highByteCount(value) {
+  let high = 0
+  for (let index = 0; index < value.length; index += 1) if (isHighByteCharacter(value[index])) high += 1
+  return high
+}
+
+/**
+ * Counts characters that sit next to another high byte. Real Latin text keeps accents apart
+ * ("Björk", "Café"), while GBK mojibake arrives in the pairs a double-byte charset produced.
+ */
+function pairedHighBytes(value) {
+  let paired = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (!isHighByteCharacter(value[index])) continue
+    if (isHighByteCharacter(value[index - 1]) || isHighByteCharacter(value[index + 1])) paired += 1
+  }
+  return paired
+}
+
+/** Reads a mojibake string back into the bytes the tagger actually wrote. */
+function mojibakeBytes(value) {
+  const bytes = Buffer.alloc(value.length)
+  for (let index = 0; index < value.length; index += 1) {
+    const mapped = CP1252_BYTES.get(value[index])
+    const code = value.charCodeAt(index)
+    if (mapped === undefined && code > 0xff) return null
+    bytes[index] = mapped ?? code
+  }
+  return bytes
+}
+
+function scoreDecoding(text, label) {
+  const kana = label === 'shift_jis' && KANA_TEXT.test(text) ? 0.3 : 0
+  return eastAsianCount(text) * 2 + kana - text.length * 0.01
+}
+
+function bestDecoding(bytes, original) {
+  let best = { text: original, score: scoreDecoding(original, 'original') }
+  for (const label of ['utf-8', ...LEGACY_CHARSETS]) {
+    let candidate
+    try { candidate = new TextDecoder(label, { fatal: false }).decode(bytes) } catch { continue }
+    if (candidate.includes('\ufffd') || GARBAGE_TEXT.test(candidate)) continue
+    // A self-validating UTF-8 reading of single-byte mojibake is decisive.
+    if (label === 'utf-8' && eastAsianCount(candidate) > 0) return { text: candidate, score: scoreDecoding(candidate, label) }
+    const score = scoreDecoding(candidate, label)
+    if (score > best.score) best = { text: candidate, score }
+  }
+  return best
+}
+
+/**
+ * Recovers text from files that are labelled UTF-8 but stored as a legacy East Asian charset.
+ * Honours BOMs and falls back to GBK/Big5/Shift-JIS/EUC-KR.
+ */
+export function decodeTextBuffer(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) return buffer.subarray(3).toString('utf8')
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) return buffer.subarray(2).toString('utf16le')
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    // Not UTF-8; the legacy candidates below decide.
+  }
+  return bestDecoding(buffer, buffer.toString('latin1')).text
+}
+
+/**
+ * Older Chinese taggers write GBK bytes into ID3 frames that declare ISO-8859-1, so titles
+ * arrive as mojibake ("ÄÇÐ©Äê"). Repair only runs on byte pairs, which leaves genuine Latin
+ * text such as "Björk" or "Café Tacvba" untouched.
+ */
+export function repairTagText(value) {
+  if (typeof value !== 'string' || !value) return value
+  const paired = pairedHighBytes(value)
+  if (paired < 2) return value
+  const bytes = mojibakeBytes(value)
+  if (!bytes) return value
+  const best = bestDecoding(bytes, value)
+  if (best.text === value) return value
+  // Require a real gain in readable characters: two-byte charsets give one per pair, UTF-8 one per triplet.
+  const gain = eastAsianCount(best.text) - eastAsianCount(value)
+  return gain >= Math.max(1, paired / 4) ? best.text : value
+}
+
+function repairCommon(common) {
+  const repair = (value) => (typeof value === 'string' ? repairTagText(value) : value)
+  return {
+    ...common,
+    title: repair(common.title),
+    artist: repair(common.artist),
+    album: repair(common.album),
+    albumartist: repair(common.albumartist),
+    genre: (common.genre ?? []).map(repair),
+    producer: (common.producer ?? []).map(repair),
+    comment: (common.comment ?? []).map((comment) => (typeof comment === 'string' ? repair(comment) : comment)),
+  }
+}
 const normalized = (value) => text(value).normalize('NFKC').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]/gu, '')
 // Album identity is deliberately narrower than genre/search normalization:
 // trim, Unicode compatibility-normalize, and case-fold, but keep punctuation
@@ -25,7 +147,7 @@ const pathKey = (file) => {
 }
 const exists = async (file) => { try { await fs.access(file); return true } catch { return false } }
 const timestamp = () => new Date().toISOString()
-const METADATA_VERSION = 3
+const METADATA_VERSION = 5
 
 export const DEFAULT_RULES = {
   version: 1,
@@ -491,7 +613,7 @@ export class MusicLibraryStore {
       let metadataError
       try { metadata = await this.parseFile(file, { duration: true, skipCovers: !!cover }) }
       catch (error) { metadataError = error.message; metadata = { common: {}, format: {} } }
-      const common = metadata.common ?? {}
+      const common = repairCommon(metadata.common ?? {})
       let embedded = null
       if (!cover) {
         const picture = common.picture?.find((image) => /front/i.test(image.type ?? '')) ?? common.picture?.[0]
@@ -602,6 +724,16 @@ export class MusicLibraryStore {
       if (!track || track.offline || !track._path) continue
       const root = this.config.roots.find((candidate) => pathIsWithin(candidate, track._path))
       if (root) return { path: track._path, root }
+    }
+    return null
+  }
+
+  /** Reverse lookup used when the shell hands over a file instead of an id. */
+  trackByPath(file) {
+    const key = pathKey(file)
+    for (const album of this.index.albums) {
+      const track = album.tracks.find((entry) => entry._path && pathKey(entry._path) === key)
+      if (track) return { album, track }
     }
     return null
   }
@@ -823,3 +955,5 @@ function uniqueProducers(producers) {
     return true
   })
 }
+
+

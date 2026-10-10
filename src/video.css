@@ -1,0 +1,1429 @@
+/* Local video archive and player.
+   Geometry, colour and motion mirror the music terminal: square corners, 1px rules,
+   the same two easings the panels use, and an entrance owned by SurfaceTransition. */
+
+.video-archive {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  color: var(--ink);
+  font-size: 13px;
+}
+.video-archive[hidden] {
+  display: none;
+}
+
+/* Same scrim recipe as .music-panel-scrim so the overlay reads as one more surface. */
+.video-veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 12, 19, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+/* ---------------------------------------------------------------- browser */
+
+.video-browser {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin: 28px;
+  padding: 30px 35px 26px;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.13);
+  overflow: hidden;
+}
+.video-browser[hidden] {
+  display: none;
+}
+/* The thin accent rule the archive surfaces carry. */
+.video-browser::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent 62%);
+  transform-origin: left center;
+  animation: video-rule 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.video-browser-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+/* Typography copied from .panel-heading so the archive reads as another panel. */
+.video-browser-copy {
+  min-width: 0;
+}
+.video-browser-eyebrow {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.video-browser-copy h2 {
+  font-size: 23px;
+  font-weight: 500;
+  margin: 7px 0 0;
+  letter-spacing: 0.4px;
+}
+.video-browser-meta {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  line-height: 1.8;
+}
+.video-close {
+  padding: 0 4px !important;
+  font-size: 27px;
+  line-height: 1;
+  color: var(--muted) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+.video-close:hover {
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+.video-browser-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.video-browser-foot i {
+  font-style: normal;
+  margin: 0 3px;
+}
+.video-browser-foot > span:last-child {
+  text-transform: none;
+  letter-spacing: 0.4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 58%;
+}
+.video-browser-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.video-browser-actions input[type="search"] {
+  width: 196px;
+  padding: 11px 13px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  outline: none;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.video-browser-actions input[type="search"]:focus {
+  border-color: var(--accent);
+}
+.video-browser-actions input[type="search"]::placeholder {
+  color: var(--muted);
+}
+
+.video-browser-actions button,
+.video-empty button,
+.video-controls button,
+.video-topbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 15px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.video-browser-actions button:hover,
+.video-empty button:hover,
+.video-controls button:hover,
+.video-topbar button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.video-browser-actions button:active,
+.video-empty button:active {
+  transform: translateY(1px);
+}
+/* One primary action per surface, exactly like the library panel. */
+.video-browser-actions button[data-video-action="scan"],
+.video-empty button[data-video-action="scan"] {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.video-browser-actions button[data-video-action="scan"]:hover,
+.video-empty button[data-video-action="scan"]:hover {
+  color: var(--surface);
+  background: color-mix(in srgb, var(--ink) 88%, var(--accent));
+  border-color: var(--accent);
+}
+.video-browser-actions svg,
+.video-empty svg {
+  width: 15px;
+  height: 15px;
+}
+.video-browser-actions button[data-video-action="scan"] svg {
+  animation: video-spin 2.6s linear infinite paused;
+}
+.video-archive.is-scanning .video-browser-actions button[data-video-action="scan"] svg {
+  animation-play-state: running;
+}
+.video-quiet {
+  color: var(--muted);
+}
+.video-browser-actions kbd,
+.video-topbar kbd {
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0 3px;
+}
+
+.video-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 18px 20px;
+  padding: 2px 6px 10px 2px;
+  align-content: start;
+}
+.video-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  animation: video-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-card:hover,
+.video-card:focus-visible {
+  transform: translateY(-3px);
+  outline: none;
+}
+.video-card:focus-visible .video-card-poster {
+  border-color: var(--accent);
+}
+.video-card-poster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  transition: border-color 180ms ease;
+}
+.video-card:hover .video-card-poster {
+  border-color: var(--accent);
+}
+.video-card-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: video-poster-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-card:hover .video-card-poster img {
+  transform: scale(1.045);
+}
+.video-card-placeholder {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--muted);
+}
+/* Sweep of the accent rule along the bottom edge, echoing the archive ticks. */
+.video-card-poster::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-card:hover .video-card-poster::after,
+.video-card:focus-visible .video-card-poster::after {
+  transform: scaleX(1);
+}
+.video-card-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f4f7fa;
+  background: rgba(6, 12, 20, 0.34);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.video-card-play svg {
+  width: 30px;
+  height: 30px;
+  transform: scale(0.86);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-card:hover .video-card-play,
+.video-card:focus-visible .video-card-play {
+  opacity: 1;
+}
+.video-card:hover .video-card-play svg {
+  transform: scale(1);
+}
+.video-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 1px;
+}
+.video-card-body strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.video-card-body small {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.35px;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  color: var(--muted);
+  animation: video-card-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-empty[hidden] {
+  display: none;
+}
+.video-empty strong {
+  font-size: 17px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.video-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.9;
+}
+.video-empty-warn {
+  color: var(--accent);
+}
+.video-empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------- theater */
+
+/* The player sits on the archive's own light, not on a black wall. */
+.video-theater {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background:
+    radial-gradient(130% 100% at 50% -10%, color-mix(in srgb, var(--surface) 78%, transparent), transparent 68%),
+    var(--page-bg);
+  color: var(--ink);
+}
+.video-theater[hidden] {
+  display: none;
+}
+/* Soft vignette so the picture belongs to the room instead of floating on a flat fill. */
+.video-theater::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 88% at 50% 52%, transparent 52%, color-mix(in srgb, var(--page-bg) 72%, transparent));
+}
+.video-surface {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 30px 104px;
+  overflow: hidden;
+}
+/* The picture keeps its own aspect and gains the archive's frame and shadow. */
+.video-element {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #05070c;
+  border: 1px solid var(--line);
+  box-shadow: 0 28px 80px rgba(4, 12, 19, 0.34);
+  cursor: pointer;
+}
+/* Picture changes cross-fade the way album covers do. */
+.video-surface.is-switching .video-element {
+  animation: video-frame-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Fullscreen drops the frame so no padding is wasted. */
+.video-theater:fullscreen .video-surface,
+.video-archive.video-web-fullscreen .video-surface,
+.window-fullscreen .video-surface {
+  padding: 0;
+}
+.video-theater:fullscreen .video-element,
+.video-archive.video-web-fullscreen .video-element,
+.window-fullscreen .video-element {
+  border: 0;
+  box-shadow: none;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Fast-forward readout: an accent sweep across the top of the picture. */
+.video-surface::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.video-theater.is-boosting .video-surface::before {
+  opacity: 1;
+  animation: video-sweep 900ms linear infinite;
+}
+
+.video-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--accent);
+}
+.video-spinner[hidden] {
+  display: none;
+}
+.video-hud {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 13px 24px;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation: video-hud-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-hud[hidden] {
+  display: none;
+}
+.video-theater.is-boosting .video-hud {
+  border-left-color: var(--accent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.video-topbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px 34px;
+  color: var(--ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent) 42%, transparent);
+  backdrop-filter: blur(10px);
+  transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-topbar::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line), transparent 72%);
+}
+.video-topbar button {
+  color: var(--ink);
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  padding: 9px 12px;
+}
+.video-topbar button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.video-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.video-heading strong {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.video-heading small {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.video-topbar-tools {
+  display: flex;
+  gap: 8px;
+}
+.video-topbar-tools svg,
+.video-controls svg {
+  width: 16px;
+  height: 16px;
+}
+
+.video-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 30px 20px 16px;
+  color: var(--ink);
+  background: linear-gradient(0deg, color-mix(in srgb, var(--panel) 96%, transparent) 46%, transparent);
+  backdrop-filter: blur(10px);
+  transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-controls button {
+  color: var(--ink);
+  border-color: transparent;
+  background: transparent;
+  padding: 7px 9px;
+}
+.video-controls button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.video-controls .video-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.video-clock {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.6px;
+  opacity: 0.82;
+  white-space: nowrap;
+}
+.video-clock b {
+  font-weight: 500;
+  color: var(--ink);
+}
+#video-rate {
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+  justify-content: center;
+}
+#video-rate.is-boosting {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: video-boost-pulse 900ms ease-in-out infinite;
+}
+
+.video-progress {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+.video-progress-track {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+  transition: height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Ruler ticks: every tenth of the timeline, borrowed from the album ruler. */
+.video-progress-track::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+  background-image: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 34%, transparent) 0 1px, transparent 1px 10%);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.video-progress:hover .video-progress-track {
+  height: 5px;
+}
+.video-progress:hover .video-progress-track::after,
+.video-progress:focus-visible .video-progress-track::after {
+  opacity: 1;
+}
+.video-progress-buffer,
+.video-progress-played {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+.video-progress-buffer {
+  width: 0;
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+}
+.video-progress-played {
+  width: 0;
+  background: var(--accent);
+  transition: box-shadow 200ms ease;
+}
+.video-theater.is-boosting .video-progress-played {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.video-progress-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--page-bg);
+  transform: translateY(-50%) scale(0);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-progress:hover .video-progress-thumb,
+.video-progress:focus-visible .video-progress-thumb {
+  transform: translateY(-50%) scale(1);
+}
+.video-progress-tip {
+  position: absolute;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-left: 1px solid var(--accent);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  animation: video-hud-in 160ms ease both;
+}
+.video-progress-tip[hidden] {
+  display: none;
+}
+
+.video-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.video-volume input[type="range"] {
+  width: 84px;
+  height: 2px;
+  appearance: none;
+  background: color-mix(in srgb, var(--ink) 26%, transparent);
+  cursor: pointer;
+}
+.video-volume input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  background: var(--ink);
+  transition: transform 160ms ease;
+}
+.video-volume input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.25);
+}
+#video-mute.is-off {
+  color: var(--muted);
+}
+
+.video-menu {
+  position: absolute;
+  right: 92px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  min-width: 118px;
+  padding: 6px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(4, 12, 19, 0.22);
+  backdrop-filter: blur(10px);
+  animation: video-menu-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-menu[hidden] {
+  display: none;
+}
+.video-menu button {
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border-color: transparent;
+}
+.video-menu button.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.video-menu button i {
+  font-style: normal;
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+/* Stream details, floating over the picture like the rest of the player chrome. */
+.video-info {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: min(560px, 82%);
+  max-height: 76%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px rgba(4, 12, 19, 0.3);
+  backdrop-filter: blur(12px);
+  animation: video-info-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes video-info-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -46%) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.video-info[hidden] {
+  display: none;
+}
+.video-info header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.video-info header strong {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.video-info header button {
+  padding: 0 4px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+}
+.video-info header button:hover {
+  color: var(--accent);
+}
+.video-info-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 6px 18px 10px;
+}
+.video-info-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: 12px;
+}
+.video-info-row:last-child {
+  border-bottom: 0;
+}
+.video-info-row dt {
+  flex: 0 0 96px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+}
+.video-info-row dd {
+  flex: 1;
+  margin: 0;
+  text-align: right;
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+.video-info footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--line);
+}
+.video-info footer button {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: transparent;
+}
+.video-info footer button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.video-info footer span {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.video-playlist {
+  position: relative;
+  z-index: 2;
+  width: 306px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border-left: 1px solid var(--line);
+  color: var(--ink);
+  backdrop-filter: blur(10px);
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease;
+}
+.video-playlist[hidden] {
+  display: none;
+}
+.video-playlist header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.video-playlist header strong {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.video-playlist header span {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  opacity: 0.55;
+}
+.video-playlist-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 0;
+}
+.video-playlist-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 20px 12px 22px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  animation: video-row-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+  transition: background 180ms ease, color 180ms ease;
+}
+.video-playlist-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center top;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-playlist-row:hover {
+  background: var(--veil);
+}
+.video-playlist-row.is-current {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.video-playlist-row.is-current::before {
+  transform: scaleY(1);
+}
+.video-playlist-row strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.video-playlist-row small {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.video-playlist-row.is-current small {
+  color: var(--accent);
+  opacity: 0.95;
+}
+
+/* Idle: the picture owns the screen. */
+.video-theater.idle .video-controls {
+  opacity: 0;
+  transform: translateY(14px);
+  pointer-events: none;
+}
+.video-theater.idle .video-topbar {
+  opacity: 0;
+  transform: translateY(-14px);
+  pointer-events: none;
+}
+.video-theater.idle .video-element {
+  cursor: none;
+}
+
+/* Web fullscreen keeps the window frame but gives every pixel to the picture. */
+.video-archive.video-web-fullscreen .video-playlist,
+.window-fullscreen .video-playlist {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* While the picture plays, the archive canvas stays out of the compositor's way. */
+#stage.video-theater-open .three-scene {
+  visibility: hidden;
+}
+
+/* ---------------------------------------------------------------- boot sequence */
+
+/* Endfield-style boot: the surface unfolds behind a riding scan line, corner brackets
+   snap in, then the content lands on a short stagger. */
+.video-hud-frame {
+  position: absolute;
+  inset: 10px;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.4;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left top / 16px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left top / 1px 16px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 16px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 1px 16px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 16px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 1px 16px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 16px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 1px 16px no-repeat;
+}
+.video-hud-frame::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+}
+.video-hud-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(0deg, color-mix(in srgb, var(--accent) 16%, transparent) 0 1px, transparent 1px 5px);
+  opacity: 0;
+}
+
+.video-browser.is-booting {
+  animation: video-boot-unfold 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-browser.is-booting .video-hud-frame {
+  animation: video-corner-in 300ms 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-browser.is-booting .video-hud-frame::before {
+  animation: video-scan-ride 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-browser.is-booting .video-hud-frame::after {
+  animation: video-grid-flash 620ms ease-out both;
+}
+.video-browser.is-booting .video-browser-copy,
+.video-browser.is-booting .video-browser-actions {
+  animation: video-boot-line 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-browser.is-booting .video-browser-copy {
+  animation-delay: 170ms;
+}
+.video-browser.is-booting .video-browser-actions {
+  animation-delay: 230ms;
+}
+.video-browser.is-booting .video-browser-foot {
+  animation: video-boot-line 320ms 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-browser.is-booting .video-card,
+.video-browser.is-booting .video-empty {
+  animation-delay: calc(240ms + var(--i, 0) * 26ms);
+}
+
+/* The player locks on: a reticle closes on the picture while the bars slide in. */
+.video-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(46%, 520px);
+  height: min(46%, 520px);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+}
+.video-reticle::before,
+.video-reticle::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.video-reticle::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: scaleX(0);
+}
+.video-reticle::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: scaleY(0);
+}
+.video-theater.is-booting .video-surface {
+  animation: video-boot-iris 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-theater.is-booting .video-reticle {
+  animation: video-reticle-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-theater.is-booting .video-reticle::before {
+  animation: video-reticle-x 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-theater.is-booting .video-reticle::after {
+  animation: video-reticle-y 380ms 60ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.video-theater.is-booting .video-topbar {
+  animation: video-bar-down 300ms 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-theater.is-booting .video-controls {
+  animation: video-bar-up 300ms 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.video-theater.is-booting .video-playlist {
+  animation: video-boot-wipe-x 380ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes video-boot-unfold {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes video-boot-iris {
+  from {
+    clip-path: inset(46% 6% 46% 6%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes video-boot-wipe-x {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes video-boot-line {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes video-corner-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+}
+@keyframes video-scan-ride {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+@keyframes video-grid-flash {
+  0% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes video-reticle-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.35);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+}
+@keyframes video-reticle-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes video-reticle-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes video-bar-down {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes video-bar-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes video-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes video-row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes video-poster-in {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes video-frame-in {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes video-hud-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes video-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes video-rule {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+@keyframes video-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes video-boost-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+@keyframes video-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The archive's 动效 preference also silences the video surface. */
+.reduce-motion .video-card,
+.reduce-motion .video-empty,
+.reduce-motion .video-playlist-row,
+.reduce-motion .video-card-poster img,
+.reduce-motion .video-browser::before,
+.reduce-motion .video-hud,
+.reduce-motion .video-menu,
+.reduce-motion .video-surface.is-switching .video-element,
+.reduce-motion .video-surface::before,
+.reduce-motion #video-rate.is-boosting {
+  animation: none !important;
+}
+.reduce-motion .video-card:hover {
+  transform: none;
+}
+.reduce-motion .video-card:hover .video-card-poster img {
+  transform: none;
+}
+/* The boot sequence is the archive's 动效 preference's business too. */
+.reduce-motion .video-browser.is-booting,
+.reduce-motion .video-browser.is-booting *,
+.reduce-motion .video-theater.is-booting,
+.reduce-motion .video-theater.is-booting * {
+  animation: none !important;
+}
+.reduce-motion .video-browser.is-booting {
+  clip-path: none;
+}
+.reduce-motion .video-controls,
+.reduce-motion .video-topbar,
+.reduce-motion .video-playlist {
+  transition-duration: 1ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-card,
+  .video-empty,
+  .video-playlist-row,
+  .video-card-poster img,
+  .video-browser::before,
+  .video-hud,
+  .video-menu,
+  .video-surface.is-switching .video-element,
+  .video-surface::before,
+  #video-rate.is-boosting,
+  .video-browser-actions button[data-video-action="scan"] svg {
+    animation: none !important;
+  }
+  .video-browser.is-booting,
+  .video-browser.is-booting *,
+  .video-theater.is-booting,
+  .video-theater.is-booting * {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 1080px) {
+  .video-playlist {
+    width: 250px;
+  }
+}
+@media (max-width: 820px) {
+  .video-browser {
+    margin: 12px;
+    padding: 20px;
+  }
+  .video-browser-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .video-browser-actions input[type="search"] {
+    width: 100%;
+  }
+  .video-theater {
+    flex-direction: column;
+  }
+  .video-playlist {
+    width: auto;
+    max-height: 38%;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}

@@ -33,10 +33,10 @@ await writeFile(path.join(root, 'src', 'build-version.ts'), `export const BUILD_
 await writeFile(path.join(root, 'README.md'), [
   `Windows build: ${initialVersion} (pending)`,
   `${initialVersion} 是本机开发候选包，验收待完成。`,
-  `启动 Rhine-Music-Desktop-${initialVersion}.exe，程序位于 app-v${initialVersion}。`,
+  `启动 Rhine-Player-Desktop-${initialVersion}.exe，程序位于 app-v${initialVersion}。`,
 ].join('\n'))
 await writeFile(path.join(root, 'CHANGELOG.md'), '# Changelog\n')
-await writeFile(path.join(output, `Rhine-Music-Desktop-${initialVersion}.exe`), 'preserved dev.1')
+await writeFile(path.join(output, `Rhine-Player-Desktop-${initialVersion}.exe`), 'preserved dev.1')
 
 function start(args) {
   const child = spawn(process.execPath, [script, '--root', root, '--output-dir', output, ...args], { windowsHide: true })
@@ -70,7 +70,7 @@ try {
   assert.match(await readFile(path.join(root, 'app.manifest'), 'utf8'), /assemblyIdentity version="0\.6\.0\.2"/)
   const readme = await readFile(path.join(root, 'README.md'), 'utf8')
   assert.match(readme, /Windows build: 0\.6\.0-dev\.2/)
-  assert.match(readme, /Rhine-Music-Desktop-0\.6\.0-dev\.2\.exe/)
+  assert.match(readme, /Rhine-Player-Desktop-0\.6\.0-dev\.2\.exe/)
   assert.match(readme, /app-v0\.6\.0-dev\.2/)
   assert.match(await readFile(path.join(root, 'CHANGELOG.md'), 'utf8'), /## 0\.6\.0-dev\.2 /)
 
@@ -97,8 +97,12 @@ try {
   const blockedFinalize = run(['--finalize'], 1)
   assert.match(blockedFinalize.stderr, /performance-acceptance\.json/)
   assert.equal(JSON.parse(await readFile(path.join(root, 'version.json'))).version, '0.6.0-dev.8')
-  assert.equal(await readFile(path.join(output, `Rhine-Music-Desktop-${initialVersion}.exe`), 'utf8'), 'preserved dev.1')
+  assert.equal(await readFile(path.join(output, `Rhine-Player-Desktop-${initialVersion}.exe`), 'utf8'), 'preserved dev.1')
   console.log('Version allocation passed: metadata sync, output collision scan, stale-state recovery, concurrent builds, dry run, sync-only, and final-release gate.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
+
+
+
+
