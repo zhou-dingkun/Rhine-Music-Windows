@@ -2,7 +2,9 @@ param(
   [string]$NodePath,
   [string]$WebView2Dir,
   [string]$RuntimeTemplateDir,
-  [string]$OutputDirectory
+  [string]$OutputDirectory,
+  # Builds the version recorded in version.json as-is instead of allocating a new -dev.N package.
+  [switch]$ReleaseVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,7 +58,7 @@ $previousLockEnvironment = $env:RHINE_BUILD_LOCK_HELD
 try {
   New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
   $env:RHINE_BUILD_LOCK_HELD = '1'
-  & $NodePath (Join-Path $projectRoot 'scripts\version.mjs') --allocate-dev --output-dir $outputDir
+  & $NodePath (Join-Path $projectRoot 'scripts\version.mjs') $(if ($ReleaseVersion) { '--sync' } else { '--allocate-dev' }) --output-dir $outputDir
   $versionExitCode = $LASTEXITCODE
   if ($null -eq $previousLockEnvironment) { Remove-Item Env:\RHINE_BUILD_LOCK_HELD -ErrorAction SilentlyContinue }
   else { $env:RHINE_BUILD_LOCK_HELD = $previousLockEnvironment }
@@ -64,10 +66,28 @@ try {
 
   $versionState = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
   $version = [string]$versionState.version
-  if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)-dev\.(\d+)$') {
-    throw "A Windows development package needs a unique prerelease version; found '$version'."
+  if ($ReleaseVersion) {
+    if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+      throw "A release package needs a plain x.y.z version; found '$version'."
+    }
+    # version.mjs marks a final release with the 65535 sentinel, which AssemblyVersion rejects:
+    # normalize the numeric identity to x.y.z.0 for the compiler and the Win32 manifest.
+    $numericVersion = "{0}.{1}.{2}.0" -f $Matches[1], $Matches[2], $Matches[3]
+    $desktopPath = Join-Path $projectRoot 'DesktopProgram.cs'
+    $desktopText = Get-Content -LiteralPath $desktopPath -Raw
+    $desktopText = $desktopText -replace 'AssemblyVersion\("\d+\.\d+\.\d+\.\d+"\)', "AssemblyVersion(`"$numericVersion`")"
+    $desktopText = $desktopText -replace 'AssemblyFileVersion\("\d+\.\d+\.\d+\.\d+"\)', "AssemblyFileVersion(`"$numericVersion`")"
+    Set-Content -LiteralPath $desktopPath -Value $desktopText -Encoding utf8
+    $manifestPath = Join-Path $projectRoot 'app.manifest'
+    $manifestText = Get-Content -LiteralPath $manifestPath -Raw
+    $manifestText = $manifestText -replace 'assemblyIdentity version="[^"]+"', "assemblyIdentity version=`"$numericVersion`""
+    Set-Content -LiteralPath $manifestPath -Value $manifestText -Encoding utf8
+  } else {
+    if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)-dev\.(\d+)$') {
+      throw "A Windows development package needs a unique prerelease version; found '$version'."
+    }
+    $numericVersion = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $Matches[4]
   }
-  $numericVersion = "{0}.{1}.{2}.{3}" -f $Matches[1], $Matches[2], $Matches[3], $Matches[4]
   $exeName = "Rhine-Player-Desktop-$version.exe"
   $readmeName = "README-Rhine-Player-Desktop-$version.txt"
   $releaseManifestName = "release-manifest-$version.json"

@@ -18,9 +18,9 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyTitle("Rhine Player Desktop")]
 [assembly: AssemblyProduct("Rhine Player")]
 [assembly: AssemblyDescription("Rhine Player independent Windows desktop media player")]
-[assembly: AssemblyVersion("0.6.0.98")]
-[assembly: AssemblyFileVersion("0.6.0.98")]
-[assembly: AssemblyInformationalVersion("0.6.0-dev.98")]
+[assembly: AssemblyVersion("0.7.0.0")]
+[assembly: AssemblyFileVersion("0.7.0.0")]
+[assembly: AssemblyInformationalVersion("0.7.0")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Bong712")]
 
 internal static class Program
@@ -29,7 +29,7 @@ internal static class Program
     private const string ProductName = "Rhine Music";
     /// <summary>Name shown by Windows: the taskbar, Alt-Tab and the Open-with list.</summary>
     internal const string DisplayName = "Rhine Player";
-    private const string AppVersion = "0.6.0-dev.98";
+    private const string AppVersion = "0.7.0";
     private static int startedProcessId;
     private const uint CreateNoWindow = 0x08000000;
     private const uint StartfUseShowWindow = 0x00000001;
@@ -1499,6 +1499,8 @@ internal sealed class DesktopWindow : Form
     }
 
 }
+
+
 
 
 

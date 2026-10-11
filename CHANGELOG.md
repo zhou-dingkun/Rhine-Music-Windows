@@ -1,8 +1,14 @@
 # Rhine Music Windows port changelog
 
-## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.98，2026-10-10）
+## Rhine Player 分支：本仓库相对上游的改动（0.7.0，2026-10-10）
 
 本分支由 [zhou-dingkun](https://github.com/zhou-dingkun) 在 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows)（上游为 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo)、[LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)）基础上继续开发，按原仓库 MIT 许可开源，保留全部上游署名；非代码素材的授权边界见 [NOTICE.md](NOTICE.md)。
+
+### 0.7.0 版本号
+
+- 版本由 `0.6.0-dev.98` 提升为正式号 **0.7.0**：`version.json` 切换为 `channel: release`，`package.json`/`package-lock.json`、`src/build-version.ts`、`DesktopProgram.cs`（AssemblyVersion / AssemblyFileVersion / AssemblyInformationalVersion / AppVersion）、`app.manifest`、README 与发行产物名全部同步。
+- 构建脚本新增 `-ReleaseVersion`：跳过开发序号分配、直接按 `version.json` 出包；上游脚本给正式版写的 `65535` 哨兵值在 `AssemblyVersion` 中非法，改为归一化为 `x.y.z.0`（Win32 清单与程序集信息一致）。
+- 产物为 `Rhine-Player-Desktop-0.7.0.exe`（FileVersion 0.7.0.0 / ProductVersion 0.7.0），运行时标题 `Rhine Player 0.7.0`；数据目录仍为 `music-data-v3`，曲库、歌单与设置不受影响。
 
 ### 0.6.0-dev.98 修复
 

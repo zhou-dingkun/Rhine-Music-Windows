@@ -2,7 +2,7 @@
 
 这是 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo) 的 Windows 桌面移植版。项目在三维音乐档案界面和本机播放基础上，添加了同步歌词显示，并扩展了 Windows 曲库、歌单和播放队列管理。
 
-**当前版本：0.6.0-dev.98** · **维护者：** [Bong712](https://github.com/Bong712)
+**当前版本：0.7.0** · **维护者：** [Bong712](https://github.com/Bong712)
 
 > **本仓库是 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows) 的分支（Rhine Player）**，由 [zhou-dingkun](https://github.com/zhou-dingkun) 继续开发（上方维护者为上游作者），按原仓库 **MIT 许可**开源，保留全部上游署名与资源说明（见 [NOTICE.md](NOTICE.md)、[LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。相对上游的改动见下方“本分支的改动”与 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -66,9 +66,9 @@
 
 ## 发行说明
 
-当前发行使用 `0.6.0-dev.98` 版本号。应用界面显示实际的 WebView2 / WebGL 2 图形路径及 Bong712 维护者信息。帧率由具体设备的显示器、显卡和驱动决定；项目不以开发原型数据代替最终用户设备上的性能承诺。
+当前发行使用 `0.7.0` 版本号。应用界面显示实际的 WebView2 / WebGL 2 图形路径及 Bong712 维护者信息。帧率由具体设备的显示器、显卡和驱动决定；项目不以开发原型数据代替最终用户设备上的性能承诺。
 
-详细改动见 [发行说明](RELEASE_NOTES_0.6.0-dev.98.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+详细改动见 [发行说明](RELEASE_NOTES_0.7.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 开发与构建
 
