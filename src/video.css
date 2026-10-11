@@ -1104,13 +1104,8 @@
 
 /* ---------------------------------------------------------------- title bar clearance */
 
-/* Panels and the video archive keep clear of the caption strip at the top right. */
-.window-chrome .music-panel-scrim {
-  padding-top: 50px;
-}
-.window-chrome .video-browser {
-  margin-top: 46px;
-}
+/* The desktop shell offsets every surface below the reserved caption strip
+   (see window-chrome.css); nothing else may reach into it. */
 
 /* Web fullscreen keeps the window frame but gives every pixel to the picture. */
 .video-archive.video-web-fullscreen .video-playlist,

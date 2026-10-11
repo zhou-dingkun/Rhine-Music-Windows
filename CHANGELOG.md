@@ -1,8 +1,14 @@
 # Rhine Music Windows port changelog
 
-## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.97，2026-10-10）
+## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.98，2026-10-10）
 
 本分支由 [zhou-dingkun](https://github.com/zhou-dingkun) 在 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows)（上游为 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo)、[LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)）基础上继续开发，按原仓库 MIT 许可开源，保留全部上游署名；非代码素材的授权边界见 [NOTICE.md](NOTICE.md)。
+
+### 0.6.0-dev.98 修复
+
+- **标题栏改为保留区**：桌面壳中顶部 40px 作为专属标题栏带（不透明底色 + 强调色下边界线，`z-index: 50`），除最小化/最大化/关闭按钮外**任何 UI 都不得进入**。
+- 所有界面整体下移到该带之下：视频档案与播放页（`top: 40px`，播放器自身标题栏从 40px 开始）、对话框遮罩、专辑详情页；拖动条高度与保留区一致（40px）。
+- 真全屏时该带隐藏（`display: none`）并把画面恢复为整屏（`top: 0`），把整块屏幕交还给画面。
 
 ### 0.6.0-dev.97 修复
 
@@ -472,5 +478,9 @@
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
 
 ## 0.6.0-dev.97 (2026-10-11)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.98 (2026-10-11)
 
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.

@@ -22,7 +22,7 @@ const ICONS = {
 };
 
 const DRAG_BAND = 74;
-const CAPTION_BAND = 34;
+const CAPTION_BAND = 40;
 const RESIZE_MARGIN = 7;
 const RESIZE_ZONES: Array<[string, (x: number, y: number, w: number, h: number) => boolean]> = [
   ["topleft", (x, y) => x < RESIZE_MARGIN && y < RESIZE_MARGIN],
@@ -130,3 +130,4 @@ export function setupWindowChrome(): boolean {
   webview.postMessage("window:state");
   return true;
 }
+

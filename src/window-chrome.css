@@ -1,6 +1,11 @@
 /* Desktop shell only: the caption bar lives inside the archive header.
    The window keeps no system frame, so these controls and the top drag band replace it. */
 
+:root {
+  /* Height of the reserved caption strip; every other surface starts below it. */
+  --caption-height: 40px;
+}
+
 .window-controls {
   position: fixed;
   top: 7px;
@@ -47,18 +52,37 @@
   transform: translateY(1px);
 }
 
-/* A hairline where the caption used to end, so the top band reads as the title bar. */
+/* The caption strip is a reserved band: nothing but the window controls may live here.
+   It is painted opaque above every surface, and its lower edge is the boundary line. */
 .window-chrome #stage::before {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  top: 30px;
-  height: 1px;
-  z-index: 5;
+  top: 0;
+  height: var(--caption-height, 40px);
+  z-index: 50;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, var(--line) 26%, var(--line) 74%, transparent);
-  opacity: 0.6;
+  background: var(--page-bg);
+  border-bottom: 1px solid var(--accent);
+}
+
+/* App surfaces start below the strip so their own chrome never reaches into it. */
+.window-chrome .video-archive {
+  top: var(--caption-height, 40px);
+}
+.window-chrome .music-panel-scrim {
+  top: var(--caption-height, 40px);
+  padding: 28px;
+}
+.window-chrome #music-detail {
+  top: var(--caption-height, 40px);
+}
+/* Full screen hands the whole screen to the picture again. */
+.window-fullscreen .video-archive,
+.window-fullscreen #music-detail,
+.window-fullscreen .music-panel-scrim {
+  top: 0;
 }
 
 /* True full screen: the caption strip belongs to the picture, not the window. */
@@ -74,3 +98,4 @@
     transition-duration: 1ms;
   }
 }
+
