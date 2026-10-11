@@ -1,8 +1,15 @@
 # Rhine Music Windows port changelog
 
-## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.96，2026-10-10）
+## Rhine Player 分支：本仓库相对上游的改动（0.6.0-dev.97，2026-10-10）
 
 本分支由 [zhou-dingkun](https://github.com/zhou-dingkun) 在 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows)（上游为 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo)、[LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)）基础上继续开发，按原仓库 MIT 许可开源，保留全部上游署名；非代码素材的授权边界见 [NOTICE.md](NOTICE.md)。
+
+### 0.6.0-dev.97 修复
+
+- **标题栏与子窗口重叠**：对话框与视频档案整体下移（面板顶部 46px > 窗口按钮底部 33px），顶部拖动条与最小化/最大化/关闭按钮不再压住面板内容。
+- **视频列表封面**：没有同名封面文件的视频会从视频本体抓取一帧（隐藏 `<video>` + canvas，取 12% 处、480px JPEG），缓存在本机并按 160 张滚动，卡片上淡入显示，不再只显示扩展名占位。
+- **视频播放列表可编辑**：卡片右上角 `＋/✓` 加入/移出，侧栏每行 `×` 移除，另有“全部加入”“清空”。服务端存 `video-playlist.json`（只存条目标识，读取时用当前索引补全，失效条目自动忽略并提示数量）；列表为空时回退显示整个视频库并给出提示；上一个/下一个与自动连播按播放列表顺序。
+- **画面与背景错位**：播放画面改为铺满 surface 框（`object-fit: contain`、透明底色、无边框与投影），消除半像素错位与相框残留；surface 内边距调整为 24/24/96。
 
 ### 新增：本地视频播放器（`src/video-app.ts`、`src/video.css`、`scripts/video-library.mjs`）
 
@@ -461,5 +468,9 @@
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
 
 ## 0.6.0-dev.96 (2026-10-10)
+
+- Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.
+
+## 0.6.0-dev.97 (2026-10-11)
 
 - Windows desktop development package; 3840×2160 real-present 60 FPS acceptance is pending.

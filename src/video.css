@@ -262,11 +262,63 @@
   border-color: var(--accent);
 }
 .video-card-poster img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   animation: video-poster-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.video-card-poster img[src^="/api/"],
+.video-card-poster img.is-ready {
+  animation: video-thumb-in 320ms ease both;
+}
+/* Frames captured from the file itself fade in over the placeholder. */
+@keyframes video-thumb-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Add-to-playlist affordance sits on the artwork corner. */
+.video-card-add {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.video-card-add svg {
+  width: 14px;
+  height: 14px;
+}
+.video-card:hover .video-card-add,
+.video-card:focus-within .video-card-add,
+.video-card-add.is-added {
+  opacity: 1;
+  transform: translateY(0);
+}
+.video-card-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.video-card-add.is-added {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .video-card:hover .video-card-poster img {
   transform: scale(1.045);
@@ -409,19 +461,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 30px 30px 104px;
+  padding: 24px 24px 96px;
   overflow: hidden;
 }
 /* The picture keeps its own aspect and gains the archive's frame and shadow. */
+/* The picture is letterboxed inside the surface box, so its box stays pixel-aligned. */
 .video-element {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  background: #05070c;
-  border: 1px solid var(--line);
-  box-shadow: 0 28px 80px rgba(4, 12, 19, 0.34);
+  background: transparent;
+  border: 0;
   cursor: pointer;
 }
 /* Picture changes cross-fade the way album covers do. */
@@ -921,23 +971,79 @@
   scrollbar-width: thin;
   padding: 0;
 }
+.video-playlist-tools {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.video-playlist-tools button {
+  flex: 1;
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.video-playlist-tools button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.video-playlist-empty,
+.video-playlist-hint {
+  margin: 0;
+  padding: 14px 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.video-playlist-hint {
+  padding-bottom: 6px;
+}
 .video-playlist-row {
   position: relative;
   display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+  animation: video-row-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+  transition: background 180ms ease, color 180ms ease;
+}
+.video-playlist-play {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 100%;
   padding: 12px 20px 12px 22px;
   text-align: left;
   font: inherit;
   color: var(--ink);
   background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
   cursor: pointer;
-  animation: video-row-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: calc(var(--i, 0) * 18ms);
-  transition: background 180ms ease, color 180ms ease;
+}
+.video-playlist-remove {
+  flex: none;
+  width: 34px;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border-left: 1px solid transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+.video-playlist-row:hover .video-playlist-remove,
+.video-playlist-row:focus-within .video-playlist-remove {
+  opacity: 1;
+}
+.video-playlist-remove:hover {
+  color: var(--accent);
 }
 .video-playlist-row::before {
   content: "";
@@ -994,6 +1100,16 @@
 }
 .video-theater.idle .video-element {
   cursor: none;
+}
+
+/* ---------------------------------------------------------------- title bar clearance */
+
+/* Panels and the video archive keep clear of the caption strip at the top right. */
+.window-chrome .music-panel-scrim {
+  padding-top: 50px;
+}
+.window-chrome .video-browser {
+  margin-top: 46px;
 }
 
 /* Web fullscreen keeps the window frame but gives every pixel to the picture. */

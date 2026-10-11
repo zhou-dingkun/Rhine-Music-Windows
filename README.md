@@ -2,9 +2,9 @@
 
 这是 [RonaldDeng/Rhine-Music-Demo](https://github.com/RonaldDeng/Rhine-Music-Demo) 的 Windows 桌面移植版。项目在三维音乐档案界面和本机播放基础上，添加了同步歌词显示，并扩展了 Windows 曲库、歌单和播放队列管理。
 
-**当前版本：0.6.0-dev.96** · **上游维护者：** [Bong712](https://github.com/Bong712)
+**当前版本：0.6.0-dev.97** · **维护者：** [Bong712](https://github.com/Bong712)
 
-> **本仓库是 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows) 的分支（Rhine Player）**，由 [zhou-dingkun](https://github.com/zhou-dingkun) 继续开发，按原仓库 **MIT 许可**开源，保留全部上游署名与资源说明（见 [NOTICE.md](NOTICE.md)、[LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。相对上游的改动见下方“本分支的改动”与 [CHANGELOG.md](CHANGELOG.md)。
+> **本仓库是 [Bong712/Rhine-Music-Windows](https://github.com/Bong712/Rhine-Music-Windows) 的分支（Rhine Player）**，由 [zhou-dingkun](https://github.com/zhou-dingkun) 继续开发（上方维护者为上游作者），按原仓库 **MIT 许可**开源，保留全部上游署名与资源说明（见 [NOTICE.md](NOTICE.md)、[LICENSE](LICENSE)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。相对上游的改动见下方“本分支的改动”与 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 本分支的改动
 
@@ -44,6 +44,9 @@
 ### 其他
 
 - 软件名由 Rhine Music 改为 **Rhine Player**（窗口标题、可执行文件名、程序集信息、打开方式条目、页面标题与 PWA 清单）；数据目录仍为 `%LOCALAPPDATA%\Rhine Music`，升级不会丢失曲库索引与设置。
+- **视频列表封面**：没有同名封面文件的视频会从视频本体抓取一帧作为封面（本机缓存、卡片淡入显示）。
+- **视频播放列表可编辑**：卡片右上角 `＋/✓` 加入或移出，侧栏每行 `×` 移除，另有“全部加入”“清空”；列表为空时回退显示整个视频库；上一个/下一个与自动连播按列表顺序。
+- 标题栏与对话框、视频档案保持间距，右上角窗口按钮不再压住面板内容；播放画面铺满画面框，消除半像素错位与相框残留。
 - 新增 `scripts/video-library.mjs`、`scripts/subtitles.mjs`、`scripts/build-app-icon.ps1`；构建产物包含上述功能。
 
 ## 下载与运行
@@ -63,9 +66,9 @@
 
 ## 发行说明
 
-当前发行使用 `0.6.0-dev.96` 版本号。应用界面显示实际的 WebView2 / WebGL 2 图形路径及 Bong712 维护者信息。帧率由具体设备的显示器、显卡和驱动决定；项目不以开发原型数据代替最终用户设备上的性能承诺。
+当前发行使用 `0.6.0-dev.97` 版本号。应用界面显示实际的 WebView2 / WebGL 2 图形路径及 Bong712 维护者信息。帧率由具体设备的显示器、显卡和驱动决定；项目不以开发原型数据代替最终用户设备上的性能承诺。
 
-详细改动见 [发行说明](RELEASE_NOTES_0.6.0-dev.96.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+详细改动见 [发行说明](RELEASE_NOTES_0.6.0-dev.97.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 开发与构建
 

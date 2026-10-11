@@ -22,11 +22,36 @@ async function readPlayerSettings(dataDir) {
   }
 }
 
+const VIDEO_PLAYLIST_FILE = 'video-playlist.json'
+
+/** Video playlist: ordered ids only, hydrated from the live index so removals stay truthful. */
+async function readVideoPlaylist(dataDir) {
+  try {
+    const stored = JSON.parse(await fs.readFile(path.join(dataDir, VIDEO_PLAYLIST_FILE), 'utf8'))
+    return { version: 1, items: Array.isArray(stored.items) ? stored.items.filter((entry) => entry && typeof entry.id === 'string') : [] }
+  } catch {
+    return { version: 1, items: [] }
+  }
+}
+
+async function writeVideoPlaylist(dataDir, value) {
+  await fs.writeFile(path.join(dataDir, VIDEO_PLAYLIST_FILE), `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  return value
+}
+
+function videoPlaylistPayload(videos, stored) {
+  const records = stored.items.map((entry) => videos?.record(entry.id)).filter(Boolean)
+  return {
+    version: 1,
+    items: records.map((record) => videos.publicRecord(record)),
+    missing: stored.items.length - records.length,
+  }
+}
+
 /**
  * Resolves a track the user opened from the shell. Files inside a configured root only need a
  * rescan; files elsewhere are streamed directly for this session and never joined to the library.
- */
-async function openAudioFile(store, target) {
+ */async function openAudioFile(store, target) {
   const found = store.trackByPath(target)
   if (found) return { kind: 'audio', trackId: found.track.id, albumId: found.album.id }
   const roots = store.config.roots ?? []
@@ -291,6 +316,24 @@ export async function createMusicServer({
         const settings = { ...await readPlayerSettings(store.dataDir), ...(value.decode === undefined ? {} : { decode: value.decode }) }
         await fs.writeFile(path.join(store.dataDir, PLAYER_SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
         return json(response, 200, settings)
+      }
+      // Video playlist: add from the grid, remove from the sidebar, fill or clear in bulk.
+      if (route === '/api/video-playlist' && get) {
+        return json(response, 200, videoPlaylistPayload(videos, await readVideoPlaylist(store.dataDir)))
+      }
+      if (route === '/api/video-playlist' && request.method === 'POST') {
+        if (!videos) return json(response, 503, { error: '视频索引不可用' })
+        const value = await bodyJson(request)
+        const stored = await readVideoPlaylist(store.dataDir)
+        const exists = (id) => stored.items.some((entry) => entry.id === id)
+        const push = (id) => { if (!exists(id)) stored.items.push({ id, addedAt: new Date().toISOString() }) }
+        if (value.action === 'add' && typeof value.id === 'string') push(value.id)
+        else if (value.action === 'remove' && typeof value.id === 'string') stored.items = stored.items.filter((entry) => entry.id !== value.id)
+        else if (value.action === 'clear') stored.items = []
+        else if (value.action === 'fill') for (const item of videos.snapshot().videos) push(item.id)
+        else return json(response, 400, { error: '不支持的播放列表操作' })
+        await writeVideoPlaylist(store.dataDir, stored)
+        return json(response, 200, videoPlaylistPayload(videos, stored))
       }
       // Shell integration: a file handed over by Explorer opens in the matching surface.
       if (route === '/api/open' && request.method === 'POST') {

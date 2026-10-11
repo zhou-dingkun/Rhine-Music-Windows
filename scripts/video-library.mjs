@@ -370,6 +370,11 @@ export class VideoLibraryStore {
     return record?._path ?? null
   }
 
+  /** The stored record behind an id: library entry or shell-opened file. */
+  record(id) {
+    return this.adopted.get(id) ?? (this.index.videos ?? []).find((entry) => entry.id === id) ?? null
+  }
+
   /** Adopts a file the user opened from Explorer so it can stream without a library root. */
   async adopt(file) {
     const resolved = path.resolve(file)

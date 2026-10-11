@@ -68,6 +68,9 @@ export interface VideoArchive {
 
 const STORAGE_KEY = "rhine-video-preferences";
 const POSITION_KEY = "rhine-video-positions";
+const POSTER_KEY = "rhine-video-thumbnails";
+/** A one-pixel transparent GIF keeps the card layout while a thumbnail is captured. */
+const BLANK_THUMB = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const HOLD_DELAY = 320;
 const TAP_SEEK = 5;
 const FAST_RATE = 3;
@@ -91,6 +94,8 @@ const icons = {
   list: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
   subtitles: svg('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M6.5 14h5M14 14h3.5"/>'),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.9"/>'),
+  plus: svg('<path d="M12 6v12M6 12h12"/>'),
+  check: svg('<path d="m5 13 4 4 10-10"/>'),
   scan: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>'),
 };
 
@@ -248,6 +253,12 @@ class VideoArchiveController implements VideoArchive {
   private snapshot: VideoSnapshot = EMPTY_SNAPSHOT;
   /** Files opened from the shell, listed ahead of the scanned library for this session. */
   private externals: VideoItem[] = [];
+  /** Curated playlist served by /api/video-playlist; falls back to the whole library when empty. */
+  private playlist: VideoItem[] = [];
+  private playlistMissing = 0;
+  private posterCache: Record<string, string> = readJson(POSTER_KEY, {});
+  private posterQueue: VideoItem[] = [];
+  private posterBusy = false;
   private subtitleTracks: SubtitleTrack[] = [];
   private subtitleMode = -1;
   private subtitleToken = 0;
@@ -359,6 +370,10 @@ class VideoArchiveController implements VideoArchive {
         </div>
         <aside class="video-playlist" id="video-playlist">
           <header><strong>播放列表</strong><span id="video-playlist-count"></span></header>
+          <div class="video-playlist-tools">
+            <button type="button" data-video-action="playlist-fill">全部加入</button>
+            <button type="button" data-video-action="playlist-clear">清空</button>
+          </div>
           <div class="video-playlist-body" id="video-playlist-body"></div>
         </aside>
         <aside class="video-info" id="video-info" aria-label="视频信息" hidden>
@@ -451,17 +466,33 @@ class VideoArchiveController implements VideoArchive {
         case "subtitles": this.subtitleMenu.hidden = !this.subtitleMenu.hidden; this.rateMenu.hidden = true; return;
         case "info": return this.toggleInfo();
         case "copy-info": return void this.copyInfo();
+        case "playlist-fill": return void this.playlistAction("fill");
+        case "playlist-clear": return void this.playlistAction("clear");
         case "playlist": return this.setPlaylistVisible(this.playlistPanel.hidden);
         case "web-fullscreen": return this.toggleWebFullscreen();
         case "fullscreen": return void this.toggleFullscreen();
       }
     });
     this.grid.addEventListener("click", (event) => {
-      const card = (event.target as HTMLElement).closest<HTMLElement>("[data-video-id]");
+      const target = event.target as HTMLElement;
+      const add = target.closest<HTMLElement>("[data-add-video]")?.dataset.addVideo;
+      if (add) {
+        event.stopPropagation();
+        void this.playlistAction(this.playlistKey(add) ? "remove" : "add", add);
+        return;
+      }
+      const card = target.closest<HTMLElement>("[data-video-id]");
       if (card?.dataset.videoId) this.play(card.dataset.videoId);
     });
     this.playlistBody.addEventListener("click", (event) => {
-      const row = (event.target as HTMLElement).closest<HTMLElement>("[data-video-id]");
+      const target = event.target as HTMLElement;
+      const remove = target.closest<HTMLElement>("[data-remove-video]")?.dataset.removeVideo;
+      if (remove) {
+        event.stopPropagation();
+        void this.playlistAction("remove", remove);
+        return;
+      }
+      const row = target.closest<HTMLElement>("[data-video-id]");
       if (row?.dataset.videoId) this.play(row.dataset.videoId);
     });
     this.filterInput.addEventListener("input", () => {
@@ -868,6 +899,97 @@ class VideoArchiveController implements VideoArchive {
     return [...this.externals, ...this.snapshot.videos];
   }
 
+  /** Playback order: the curated playlist when it has entries, otherwise the whole library. */
+  private queue(): VideoItem[] {
+    return this.playlist.length ? this.playlist : this.snapshot.videos;
+  }
+
+  private playlistKey(id: string) {
+    return this.playlist.some((item) => item.id === id);
+  }
+
+  // ---------------------------------------------------------------- thumbnails
+
+  /** Videos without a poster file get a frame captured from the file itself, cached locally. */
+  private queueThumbnails(items: VideoItem[]) {
+    for (const item of items) {
+      if (item.hasPoster) continue;
+      const key = `${item.id}:${item.size}`;
+      if (this.posterCache[key] || this.posterQueue.some((queued) => queued.id === item.id)) continue;
+      this.posterQueue.push(item);
+    }
+    void this.pumpThumbnails();
+  }
+
+  private async pumpThumbnails() {
+    if (this.posterBusy) return;
+    this.posterBusy = true;
+    while (this.posterQueue.length) {
+      const item = this.posterQueue.shift()!;
+      if (this.posterCache[`${item.id}:${item.size}`]) continue;
+      const dataUrl = await this.captureFrame(item);
+      if (!dataUrl) continue;
+      this.posterCache[`${item.id}:${item.size}`] = dataUrl;
+      this.saveThumbnails();
+      const image = this.grid.querySelector<HTMLImageElement>(`img[data-thumb="${item.id}"]`);
+      if (image) {
+        image.src = dataUrl;
+        image.classList.add("is-ready");
+      }
+    }
+    this.posterBusy = false;
+  }
+
+  private captureFrame(item: VideoItem): Promise<string | undefined> {
+    return new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      let settled = false;
+      const finish = (value?: string) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        video.removeAttribute("src");
+        video.load();
+        resolve(value);
+      };
+      const timer = window.setTimeout(() => finish(undefined), 15000);
+      video.addEventListener("loadeddata", () => {
+        const target = Number.isFinite(video.duration) && video.duration > 0 ? Math.min(video.duration * 0.12, 8) : 1;
+        try { video.currentTime = target; } catch { finish(undefined); }
+      }, { once: true });
+      video.addEventListener("seeked", () => {
+        try {
+          const width = 480;
+          const height = Math.max(1, Math.round((video.videoHeight / Math.max(1, video.videoWidth)) * width));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d")!.drawImage(video, 0, 0, width, height);
+          finish(canvas.toDataURL("image/jpeg", 0.72));
+        } catch {
+          finish(undefined);
+        }
+      }, { once: true });
+      video.addEventListener("error", () => finish(undefined), { once: true });
+      video.src = `/api/video/${item.id}`;
+    });
+  }
+
+  private saveThumbnails() {
+    // Keep the newest captures; a thumbnail is a small JPEG data URL.
+    const entries = Object.entries(this.posterCache).slice(-160);
+    this.posterCache = Object.fromEntries(entries);
+    writeJson(POSTER_KEY, this.posterCache);
+  }
+
+  private posterSource(item: VideoItem): string | undefined {
+    if (item.hasPoster) return `/api/video-poster/${item.id}`;
+    return this.posterCache[`${item.id}:${item.size}`];
+  }
+
   private syncTransport() {
     const playing = !this.video.paused;
     this.toggleButton.innerHTML = playing ? icons.pause : icons.play;
@@ -973,7 +1095,7 @@ class VideoArchiveController implements VideoArchive {
   }
 
   private step(direction: number) {
-    const list = this.snapshot.videos;
+    const list = this.queue();
     if (!list.length) return;
     const index = list.findIndex((video) => video.id === this.currentId);
     const next = list[(index + direction + list.length) % list.length];
@@ -1038,6 +1160,7 @@ class VideoArchiveController implements VideoArchive {
     this.archiveMotion.show(this.reduced());
     this.boot(this.browser, 1100);
     void this.refresh(false);
+    void this.loadPlaylist();
   }
 
   close() {
@@ -1101,6 +1224,7 @@ class VideoArchiveController implements VideoArchive {
     this.renderPlaylist();
     this.play(item.id);
     void this.refresh(false);
+    void this.loadPlaylist();
   }
 
   private play(id: string) {
@@ -1252,16 +1376,19 @@ class VideoArchiveController implements VideoArchive {
     this.countLabel.textContent = `${total} FILE${total === 1 ? "" : "S"}`;
     this.rootsLabel.textContent = this.snapshot.roots.map((root) => root.path).join("  ·  ");
     this.grid.innerHTML = videos.map((video, index) => {
-      const poster = video.hasPoster
-        ? `<img src="/api/video-poster/${video.id}" alt="" loading="lazy" />`
-        : `<span class="video-card-placeholder">${esc(video.extension.replace(".", "").toUpperCase())}</span>`;
+      const poster = this.posterSource(video);
+      const artwork = poster
+        ? `<img src="${poster}" alt="" loading="lazy"${video.hasPoster ? "" : ` data-thumb="${video.id}" class="is-ready"`} />`
+        : `<img src="${BLANK_THUMB}" alt="" data-thumb="${video.id}" />`;
       const shape = video.width && video.height ? `${video.width}×${video.height}` : "";
-      const detail = [video.folder, video.duration ? clock(video.duration) : "", shape, fileSize(video.size)].filter(Boolean).join(" · ");
+      const detail = [video.external ? "外部文件" : video.folder, video.duration ? clock(video.duration) : "", shape, fileSize(video.size)].filter(Boolean).join(" · ");
+      const added = this.playlistKey(video.id);
       return `<button type="button" class="video-card" style="--i:${Math.min(index, 14)}" data-video-id="${video.id}" aria-label="播放 ${esc(video.title)}">
-        <span class="video-card-poster">${poster}<i class="video-card-play">${icons.play}</i></span>
+        <span class="video-card-poster">${poster ? "" : `<span class="video-card-placeholder">${esc(video.extension.replace(".", "").toUpperCase())}</span>`}${artwork}<i class="video-card-play">${icons.play}</i><span class="video-card-add${added ? " is-added" : ""}" data-add-video="${video.id}" role="button" tabindex="-1" aria-label="${added ? "已在播放列表" : "加入播放列表"}" title="${added ? "已在播放列表" : "加入播放列表"}">${added ? icons.check : icons.plus}</span></span>
         <span class="video-card-body"><strong>${esc(video.title)}</strong><small>${esc(detail)}</small></span>
       </button>`;
     }).join("");
+    this.queueThumbnails(videos);
     const offline = this.snapshot.roots.filter((root) => root.status === "offline");
     this.empty.hidden = videos.length > 0;
     if (!videos.length) {
@@ -1272,19 +1399,75 @@ class VideoArchiveController implements VideoArchive {
   }
 
   private renderPlaylist() {
-    const videos = this.snapshot.videos;
-    this.playlistCount.textContent = `${videos.length} 个`;
-    this.playlistBody.innerHTML = videos.map((video, index) => `<button type="button" class="video-playlist-row${video.id === this.currentId ? " is-current" : ""}" style="--i:${Math.min(index, 16)}" data-video-id="${video.id}">
-      <strong>${esc(video.title)}</strong><small>${esc(video.folder)}${video.duration ? ` · ${clock(video.duration)}` : ""}</small>
-    </button>`).join("");
+    const curated = this.playlist.length > 0;
+    const videos = this.queue();
+    this.playlistCount.textContent = curated ? `${videos.length} 个` : `全部 ${videos.length} 个`;
+    if (!videos.length) {
+      this.playlistBody.innerHTML = `<p class="video-playlist-empty">播放列表为空。点视频卡片右上角的 ＋ 加入，或使用“全部加入”。</p>`;
+      return;
+    }
+    const banner = curated ? "" : `<p class="video-playlist-hint">尚未挑选，正在显示整个视频库；用卡片上的 ＋ 建立自己的列表。</p>`;
+    this.playlistBody.innerHTML = banner + videos.map((video, index) => `<div class="video-playlist-row${video.id === this.currentId ? " is-current" : ""}" style="--i:${Math.min(index, 16)}">
+      <button type="button" class="video-playlist-play" data-video-id="${video.id}" aria-label="播放 ${esc(video.title)}">
+        <strong>${esc(video.title)}</strong><small>${esc(video.external ? "外部文件" : video.folder)}${video.duration ? ` · ${clock(video.duration)}` : ""}</small>
+      </button>
+      ${curated ? `<button type="button" class="video-playlist-remove" data-remove-video="${video.id}" aria-label="从播放列表移除 ${esc(video.title)}" title="移除">×</button>` : ""}
+    </div>`).join("");
+    if (this.playlistMissing > 0) {
+      this.playlistBody.insertAdjacentHTML("beforeend", `<p class="video-playlist-hint">有 ${this.playlistMissing} 个条目已不在视频库中，已自动忽略。</p>`);
+    }
   }
 
   private syncPlaylist() {
     this.playlistBody.querySelectorAll<HTMLElement>(".video-playlist-row").forEach((row) => {
-      const current = row.dataset.videoId === this.currentId;
+      const current = row.querySelector<HTMLElement>("[data-video-id]")?.dataset.videoId === this.currentId;
       row.classList.toggle("is-current", current);
       if (current) row.scrollIntoView({ block: "nearest" });
     });
+  }
+
+  // ---------------------------------------------------------------- playlist
+
+  private async loadPlaylist() {
+    try {
+      const response = await fetch("/api/video-playlist");
+      if (!response.ok) return;
+      const payload = (await response.json()) as { items: VideoItem[]; missing?: number };
+      this.playlist = payload.items ?? [];
+      this.playlistMissing = payload.missing ?? 0;
+    } catch {
+      // A missing playlist simply keeps the library view.
+    }
+    this.renderPlaylist();
+    this.renderGrid();
+  }
+
+  /** add / remove / fill / clear, mirrored from the server so every window agrees. */
+  private async playlistAction(action: "add" | "remove" | "fill" | "clear", id?: string) {
+    try {
+      const response = await fetch("/api/video-playlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, id }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(payload.error ?? "操作失败");
+      }
+      const payload = (await response.json()) as { items: VideoItem[]; missing?: number };
+      this.playlist = payload.items ?? [];
+      this.playlistMissing = payload.missing ?? 0;
+      this.renderPlaylist();
+      this.renderGrid();
+      const labels = { add: "已加入播放列表", remove: "已从播放列表移除", fill: "已把视频库全部加入", clear: "播放列表已清空" };
+      this.showHud(labels[action]);
+      if (action === "clear" || action === "remove") {
+        const titles = { clear: "已清空播放列表", remove: "已从播放列表移除" };
+        this.notify(titles[action]);
+      }
+    } catch (error) {
+      this.notify(`播放列表操作失败：${(error as Error).message}`);
+    }
   }
 }
 
@@ -1294,4 +1477,5 @@ export function setupVideoArchive(options: VideoArchiveOptions = {}): VideoArchi
   const controller = new VideoArchiveController(topnav, options.notify ?? (() => {}));
   return controller;
 }
+
 
