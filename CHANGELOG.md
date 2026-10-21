@@ -9,6 +9,7 @@
 - 版本由 `0.6.0-dev.98` 提升为正式号 **0.7.0**：`version.json` 切换为 `channel: release`，`package.json`/`package-lock.json`、`src/build-version.ts`、`DesktopProgram.cs`（AssemblyVersion / AssemblyFileVersion / AssemblyInformationalVersion / AppVersion）、`app.manifest`、README 与发行产物名全部同步。
 - 构建脚本新增 `-ReleaseVersion`：跳过开发序号分配、直接按 `version.json` 出包；上游脚本给正式版写的 `65535` 哨兵值在 `AssemblyVersion` 中非法，改为归一化为 `x.y.z.0`（Win32 清单与程序集信息一致）。
 - 产物为 `Rhine-Player-Desktop-0.7.0.exe`（FileVersion 0.7.0.0 / ProductVersion 0.7.0），运行时标题 `Rhine Player 0.7.0`；数据目录仍为 `music-data-v3`，曲库、歌单与设置不受影响。
+- 新增维护脚本 `scripts/clean-payloads.ps1`：清理历史 `app-v<version>` 运行资源（只匹配该命名，保留正在运行的版本与最新一份，支持 `-WhatIf` 预览）；本次清理把 32 份 3.9 GB 收敛到 1 份 123 MB。
 
 ### 0.6.0-dev.98 修复
 

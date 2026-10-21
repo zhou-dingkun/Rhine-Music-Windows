@@ -55,6 +55,13 @@
 
 在“音乐库”中添加本机音乐文件夹并扫描。播放器读取原位置的音频，不上传或复制歌曲。曲库索引、歌单、封面缓存和设置存放在 `%LOCALAPPDATA%\Rhine Music\music-data-v3`。还没有曲库时，可以直接进入演示封面。
 
+每次升级都会解压一份新的运行资源（`app-v<version>`，约 120 MB），旧版本不会自动删除。需要回收空间时运行清理脚本（只删除 `app-v*` 目录，曲库数据不受影响；默认保留正在运行的版本和最新一份）：
+
+```powershell
+pwsh -NoProfile -File scripts/clean-payloads.ps1          # 清理
+pwsh -NoProfile -File scripts/clean-payloads.ps1 -WhatIf  # 先预览
+```
+
 ## 功能与 Windows 版改进
 
 - 将 macOS／浏览器原型移植为 Windows x64 桌面程序，使用 WinForms 启动器、内置本机音乐服务和 WebView2 窗口。
